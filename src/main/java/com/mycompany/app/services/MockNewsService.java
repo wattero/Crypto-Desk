@@ -1,8 +1,9 @@
-package com.mycompany.app.service;
+package com.mycompany.app.services;
 
-import com.mycompany.app.model.News;
 import java.util.ArrayList;
 import java.util.List;
+
+import com.mycompany.app.models.News;
 
 public class MockNewsService implements NewsService {
     @Override

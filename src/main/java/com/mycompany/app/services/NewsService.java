@@ -1,7 +1,8 @@
-package com.mycompany.app.service;
+package com.mycompany.app.services;
 
-import com.mycompany.app.model.News;
 import java.util.List;
+
+import com.mycompany.app.models.News;
 
 public interface NewsService {
     List<News> getNewsForCrypto(String cryptoId);

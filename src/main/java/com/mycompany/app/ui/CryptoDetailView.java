@@ -1,6 +1,5 @@
 package com.mycompany.app.ui;
 
-import com.mycompany.app.model.Crypto;
 import javafx.geometry.Insets;
 import javafx.scene.chart.LineChart;
 import javafx.scene.chart.NumberAxis;
@@ -12,6 +11,8 @@ import javafx.scene.layout.VBox;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import java.util.Random;
+
+import com.mycompany.app.models.Crypto;
 
 /**
  * Embeddable crypto detail pane. Designed to be placed inside the main application layout.
@@ -138,10 +139,10 @@ public class CryptoDetailView extends VBox {
     /**
      * Populate related news for the crypto. Caller provides the list (from service).
      */
-    public void setNews(java.util.List<com.mycompany.app.model.News> news) {
+    public void setNews(java.util.List<com.mycompany.app.models.News> news) {
         newsFeed.getChildren().clear();
         if (news == null) return;
-        for (com.mycompany.app.model.News n : news) {
+        for (com.mycompany.app.models.News n : news) {
             newsFeed.getChildren().add(createNewsCard(n.getTitle(), n.getSource(), n.getTimeAgo()));
         }
     }

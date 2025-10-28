@@ -1,9 +1,10 @@
 package com.mycompany.app.ui;
 
-import com.mycompany.app.model.Crypto;
-import com.mycompany.app.service.CryptoService;
-import com.mycompany.app.service.MockCryptoService;
-import com.mycompany.app.service.NewsService;
+import com.mycompany.app.models.Crypto;
+import com.mycompany.app.services.CryptoService;
+import com.mycompany.app.services.MockCryptoService;
+import com.mycompany.app.services.NewsService;
+
 import javafx.geometry.Insets;
 import javafx.scene.chart.LineChart;
 import javafx.scene.chart.NumberAxis;
@@ -29,7 +30,7 @@ public class MainView extends BorderPane {
 
     public MainView() {
         this.cryptoService = new MockCryptoService();
-        this.newsService = new com.mycompany.app.service.MockNewsService();
+        this.newsService = new com.mycompany.app.services.MockNewsService();
         this.detailView = new CryptoDetailView();
 
         setupLeftSection();

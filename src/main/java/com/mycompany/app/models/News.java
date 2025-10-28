@@ -1,4 +1,4 @@
-package com.mycompany.app.model;
+package com.mycompany.app.models;
 
 public class News {
     private final String title;

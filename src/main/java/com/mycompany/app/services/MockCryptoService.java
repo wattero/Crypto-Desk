@@ -1,8 +1,9 @@
-package com.mycompany.app.service;
+package com.mycompany.app.services;
 
-import com.mycompany.app.model.Crypto;
 import java.util.ArrayList;
 import java.util.List;
+
+import com.mycompany.app.models.Crypto;
 
 public class MockCryptoService implements CryptoService {
     @Override
