@@ -34,6 +34,6 @@ mvn test
 ## Project structure
 
 - `src/main/java` — application sources (UI, services, models)
-- `src/main/resources` — CSS and other resources (`styles/dark-theme.css`)
+- `src/main/resources` — CSS and other resources
 - `src/test/java` — unit tests
 - `pom.xml` — Maven build configuration

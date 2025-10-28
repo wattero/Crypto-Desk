@@ -75,6 +75,11 @@
     -fx-font-size: 13px;
 }
 
+.sidebar-price {
+    -fx-text-fill: white;
+    -fx-font-weight: 600;
+}
+
 /* --- DETAIL VIEW --- */
 .detail-pane {
     -fx-background-color: #131316;

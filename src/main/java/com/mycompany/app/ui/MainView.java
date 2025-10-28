@@ -6,6 +6,7 @@ import com.mycompany.app.services.MockCryptoService;
 import com.mycompany.app.services.NewsService;
 import com.mycompany.app.services.MockNewsService;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
@@ -86,10 +87,17 @@ public class MainView extends BorderPane {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        Label change = new Label(String.format("%.2f%%", crypto.getChangePercent()));
+        Label priceLabel = new Label(crypto.getPriceFormatted());
+        priceLabel.getStyleClass().add("sidebar-price");
+
+        Label change = new Label(crypto.getChangeFormatted());
         change.getStyleClass().add(crypto.getChangePercent() >= 0 ? "positive-change" : "negative-change");
 
-        item.getChildren().addAll(nameAndSymbol, spacer, change);
+        VBox priceAndChange = new VBox(4);
+        priceAndChange.setAlignment(Pos.CENTER_RIGHT);
+        priceAndChange.getChildren().addAll(priceLabel, change);
+
+        item.getChildren().addAll(nameAndSymbol, spacer, priceAndChange);
         item.setOnMouseClicked(e -> selectCrypto(crypto, item));
         return item;
     }
@@ -112,7 +120,7 @@ public class MainView extends BorderPane {
         } else if (selectedCrypto != null) {
             newsView.updateNews(newsService.getNewsForCrypto(selectedCrypto.getId()));
         } else {
-            newsView.updateNews(List.of()); // Clear news if nothing is selected
+            newsView.updateNews(List.of());
         }
     }
 }

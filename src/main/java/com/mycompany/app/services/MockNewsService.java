@@ -58,9 +58,6 @@ public class MockNewsService implements NewsService {
                 break;
         }
 
-        // Recent market summary item
-        list.add(new News("Market summary: top cryptos mixed as traders digest news", "MarketWatch", "10m ago"));
-
         return list;
     }
 
