@@ -21,6 +21,22 @@
     -fx-text-fill: white;
 }
 
+.powered-by {
+    -fx-alignment: center-left;
+    -fx-spacing: 4px;
+    -fx-padding: 0 0 0 2px;
+    -fx-text-fill: white;
+}
+.powered-by .label {
+    -fx-text-fill: white;
+    -fx-font-size: 12px;
+}
+.powered-by .hyperlink {
+    -fx-text-fill: white;
+    -fx-font-size: 12px;
+    -fx-underline: true;
+}
+
 .search-field {
     -fx-background-color: #1E1E22;
     -fx-text-fill: #E0E0E0;

@@ -11,6 +11,11 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.*;
 import java.util.List;
+import javafx.scene.control.Hyperlink;
+import java.awt.Desktop;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 
 public class MainView extends BorderPane {
     private final CryptoService cryptoService;
@@ -55,6 +60,23 @@ public class MainView extends BorderPane {
         Label logo = new Label("CryptoDesk");
         logo.getStyleClass().add("logo");
 
+        // Powered by CoinGecko API (CoinGecko API is a hyperlink)
+        HBox poweredByBox = new HBox();
+        poweredByBox.setSpacing(4);
+        Label poweredByLabel = new Label("Powered by ");
+        Hyperlink cgLink = new Hyperlink("CoinGecko API");
+        cgLink.setOnAction(e -> {
+            try {
+                if (Desktop.isDesktopSupported()) {
+                    Desktop.getDesktop().browse(new URI("https://www.coingecko.com/en/api"));
+                }
+            } catch (IOException | URISyntaxException ex) {
+                // ignore navigation failures
+            }
+        });
+        poweredByBox.getChildren().addAll(poweredByLabel, cgLink);
+        poweredByBox.getStyleClass().add("powered-by");
+
         TextField searchField = new TextField();
         searchField.setPromptText("Search");
         searchField.getStyleClass().add("search-field");
@@ -67,7 +89,7 @@ public class MainView extends BorderPane {
         scrollPane.getStyleClass().add("sidebar-scroll-pane");
         VBox.setVgrow(scrollPane, Priority.ALWAYS);
 
-        sidebar.getChildren().addAll(logo, searchField, watchlistHeader, scrollPane);
+        sidebar.getChildren().addAll(logo, poweredByBox, searchField, watchlistHeader, scrollPane);
         return sidebar;
     }
 
