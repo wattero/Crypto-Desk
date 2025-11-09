@@ -1,0 +1,7 @@
+# CoinGecko API Configuration
+# Get your API key from https://www.coingecko.com/api/pricing
+coingecko.api.key=your_api_key_here
+coingecko.api.url=https://api.coingecko.com/api/v3
+
+# Optional: environment specific settings
+# environment=production
