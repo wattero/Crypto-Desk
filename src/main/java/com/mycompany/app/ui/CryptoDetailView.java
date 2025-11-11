@@ -113,14 +113,17 @@ public class CryptoDetailView extends VBox {
         ToggleGroup group = new ToggleGroup();
         priceToggle = new ToggleButton("Price");
         priceToggle.setToggleGroup(group);
-        priceToggle.getStyleClass().add("time-interval-button");
+        priceToggle.getStyleClass().add("chart-toggle-button");
         priceToggle.setSelected(true);
         priceToggle.setOnAction(e -> setShowingVolume(false));
 
         volumeToggle = new ToggleButton("Volume");
         volumeToggle.setToggleGroup(group);
-        volumeToggle.getStyleClass().add("time-interval-button");
+        volumeToggle.getStyleClass().add("chart-toggle-button");
         volumeToggle.setOnAction(e -> setShowingVolume(true));
+
+        // Set initial selected style
+        priceToggle.getStyleClass().add("chart-toggle-selected");
 
         box.getChildren().addAll(priceToggle, volumeToggle);
         return box;
@@ -348,6 +351,14 @@ public class CryptoDetailView extends VBox {
      private void setShowingVolume(boolean v) {
          if (this.showingVolume == v) return;
          this.showingVolume = v;
+
+         if (v) {
+             volumeToggle.getStyleClass().add("chart-toggle-selected");
+             priceToggle.getStyleClass().remove("chart-toggle-selected");
+         } else {
+             priceToggle.getStyleClass().add("chart-toggle-selected");
+             volumeToggle.getStyleClass().remove("chart-toggle-selected");
+         }
          // if there's a current crypto and an interval selected, refresh the data for the active chart
          String interval = (selectedIntervalButton != null) ? selectedIntervalButton.getText() : "1D";
          updateChartData(interval);
