@@ -1,4 +1,4 @@
-package com.mycompany.app.ui;
+package com.mycompany.app.views;
 
 import com.mycompany.app.models.News;
 import javafx.application.HostServices;
@@ -12,17 +12,16 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import java.util.List;
+import java.util.function.Consumer;
 
 public class NewsView extends VBox {
     private final VBox newsList = new VBox(12);
     private final ToggleButton allToggle;
     private final ToggleButton selectedToggle;
-    private final Runnable onToggleChanged;
     private HostServices hostServices;
 
-    public NewsView(Runnable onToggleChanged) {
+    public NewsView(Consumer<Boolean> onToggleChanged) {
         super(15);
-        this.onToggleChanged = onToggleChanged;
         setPadding(new Insets(25));
         setPrefWidth(350);
         getStyleClass().add("news-pane");
@@ -44,8 +43,8 @@ public class NewsView extends VBox {
         toggleBox.getStyleClass().add("news-toggle-box");
 
         toggleGroup.selectedToggleProperty().addListener((obs, oldToggle, newToggle) -> {
-            if (newToggle != null) {
-                this.onToggleChanged.run();
+            if (newToggle != null && onToggleChanged != null) {
+                onToggleChanged.accept(allToggle.isSelected());
             }
         });
 

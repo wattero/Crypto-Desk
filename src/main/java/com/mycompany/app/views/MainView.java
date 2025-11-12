@@ -1,8 +1,6 @@
-package com.mycompany.app.ui;
+package com.mycompany.app.views;
 
 import com.mycompany.app.models.Crypto;
-import com.mycompany.app.services.CryptoService;
-import com.mycompany.app.services.SerpAPINewsService;
 import javafx.application.HostServices;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -11,6 +9,7 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.*;
 import java.util.List;
+import java.util.function.Consumer;
 import javafx.scene.control.Hyperlink;
 import java.awt.Desktop;
 import java.io.IOException;
@@ -18,27 +17,28 @@ import java.net.URI;
 import java.net.URISyntaxException;
 
 public class MainView extends BorderPane {
-    private final CryptoService cryptoService;
-    private final SerpAPINewsService newsService;
-    private final CryptoDetailView detailView;
     private final NewsView newsView;
     private final VBox cryptoListBox = new VBox(8);
-    private Crypto selectedCrypto = null;
     private HBox selectedSidebarItem = null;
-    private HostServices hostServices;
+    
+    // Callback for when a crypto is selected
+    private Consumer<Crypto> onCryptoSelected;
 
-    public MainView() {
-        this.cryptoService = new CryptoService();
-        this.newsService = new SerpAPINewsService();
-        this.detailView = new CryptoDetailView();
-        this.newsView = new NewsView(this::updateNewsFeed);
+    public MainView(CryptoDetailView detailView, NewsView newsView) {
+        this.newsView = newsView;
 
         setLeft(createSidebar());
         setCenter(detailView);
         setRight(newsView);
 
         getStyleClass().add("main-view");
-        loadData();
+    }
+    
+    /**
+     * Set callback for when a crypto is selected
+     */
+    public void setOnCryptoSelected(Consumer<Crypto> callback) {
+        this.onCryptoSelected = callback;
     }
 
     /**
@@ -46,12 +46,14 @@ public class MainView extends BorderPane {
      * This should be called from the Application class
      */
     public void setHostServices(HostServices hostServices) {
-        this.hostServices = hostServices;
         this.newsView.setHostServices(hostServices);
     }
-
-    private void loadData() {
-        List<Crypto> cryptos = cryptoService.getTopCryptos();
+    
+    /**
+     * Load crypto list into sidebar
+     */
+    public void displayCryptos(List<Crypto> cryptos) {
+        cryptoListBox.getChildren().clear();
         for (Crypto crypto : cryptos) {
             cryptoListBox.getChildren().add(createSidebarItem(crypto));
         }
@@ -139,19 +141,10 @@ public class MainView extends BorderPane {
         }
         selectedSidebarItem = item;
         selectedSidebarItem.getStyleClass().add("sidebar-item-selected");
-
-        selectedCrypto = crypto;
-        detailView.setCrypto(crypto);
-        updateNewsFeed();
-    }
-
-    private void updateNewsFeed() {
-        if (newsView.isShowAllSelected()) {
-            newsView.updateNews(newsService.getGeneralNews());
-        } else if (selectedCrypto != null) {
-            newsView.updateNews(newsService.getNewsForCrypto(selectedCrypto.getId()));
-        } else {
-            newsView.updateNews(List.of());
+        
+        // Notify controller about selection
+        if (onCryptoSelected != null) {
+            onCryptoSelected.accept(crypto);
         }
     }
 }
