@@ -9,7 +9,7 @@ A JavaFX desktop application that displays cryptocurrency data and related news.
 
 ## Application properties
 
-For the crypto price data a CoinGecko API key is needed and set to `src/main/resources/application.properties`, template available at `src/main/resources/application.properties.template`
+For the news data a SerpApi key is needed and set in `src/main/resources/application.properties` to `serp.api.key`.
 
 ## Build
 
@@ -34,6 +34,11 @@ Run unit tests with:
 ```bash
 mvn test
 ```
+
+## Known issues
+
+- For the news section, All sometimes shows coin specific news, but is fixed when toggled between Selected and back to All.
+- For the volume data chart, the x-axis labels are sometimes to the side of the chart, this is fixed by toggling to price and back to volume.
 
 ## Project structure
 

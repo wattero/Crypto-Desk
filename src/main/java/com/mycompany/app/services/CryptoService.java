@@ -38,11 +38,13 @@ public class CryptoService {
                     .GET();
 
             // Add API key header
+            /* 
             String apiKey = props.getProperty("coingecko.api.key");
             if (apiKey != null && !apiKey.isBlank()) {
                 reqBuilder.header("X-CG-API-KEY", apiKey);
                 reqBuilder.header("Authorization", "Bearer " + apiKey);
             }
+            */
 
             HttpRequest request = reqBuilder.build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
@@ -101,11 +103,13 @@ public class CryptoService {
                     .GET();
 
             
+            /* 
             String apiKey = props.getProperty("coingecko.api.key");
             if (apiKey != null && !apiKey.isBlank()) {
                 reqBuilder.header("X-CG-API-KEY", apiKey);
                 reqBuilder.header("Authorization", "Bearer " + apiKey);
             }
+            */
 
             HttpRequest request = reqBuilder.build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));

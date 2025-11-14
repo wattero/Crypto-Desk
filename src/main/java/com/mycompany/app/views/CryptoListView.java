@@ -51,11 +51,7 @@ public class CryptoListView extends VBox {
         poweredByBox.getChildren().addAll(poweredByLabel, cgLink);
         poweredByBox.getStyleClass().add("powered-by");
 
-        TextField searchField = new TextField();
-        searchField.setPromptText("Search");
-        searchField.getStyleClass().add("search-field");
-
-        Label watchlistHeader = new Label("Watchlist");
+        Label watchlistHeader = new Label("Top 5 Cryptocurrencies");
         watchlistHeader.getStyleClass().add("watchlist-header");
 
         ScrollPane scrollPane = new ScrollPane(cryptoListBox);
@@ -63,7 +59,7 @@ public class CryptoListView extends VBox {
         scrollPane.getStyleClass().add("sidebar-scroll-pane");
         VBox.setVgrow(scrollPane, Priority.ALWAYS);
 
-        getChildren().addAll(logo, poweredByBox, searchField, watchlistHeader, scrollPane);
+        getChildren().addAll(logo, poweredByBox, watchlistHeader, scrollPane);
     }
 
     /**

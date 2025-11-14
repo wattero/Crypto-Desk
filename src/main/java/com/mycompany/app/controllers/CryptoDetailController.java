@@ -72,7 +72,7 @@ public class CryptoDetailController {
             case "1M" -> "30";
             case "3M" -> "90";
             case "1Y" -> "365";
-            case "All" -> "max";
+            case "All" -> "365";
             default -> "1";
         };
     }
