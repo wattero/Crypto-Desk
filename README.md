@@ -39,6 +39,7 @@ mvn test
 
 - For the news section, All sometimes shows coin specific news, but is fixed when toggled between Selected and back to All.
 - For the volume data chart, the x-axis labels are sometimes to the side of the chart, this is fixed by toggling to price and back to volume.
+- CoinGecko API rate limits easily and only allows 5 updates every 30s. Data currently updates every time a crypto/timeframe/(volume/price chart) is changed. API rate limiting shows up in the console.
 
 ## Project structure
 
