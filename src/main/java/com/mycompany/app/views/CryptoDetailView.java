@@ -35,14 +35,14 @@ public class CryptoDetailView extends VBox {
     private ToggleButton priceToggle;
     private ToggleButton volumeToggle;
     private boolean showingVolume = false;
-    private final String[] timeIntervals = {"1D", "1W", "1M", "3M", "1Y", "All"};
+    private final String[] timeIntervals = { "1D", "1W", "1M", "3M", "1Y" };
     private final java.util.List<Button> intervalButtons = new java.util.ArrayList<>();
     private Button selectedIntervalButton = null;
 
     private final Label marketCapValue = new Label();
     private final Label volumeValue = new Label();
     private final Label circulatingSupplyValue = new Label();
-    
+
     // Callback for when user selects a time interval
     private Consumer<String> onIntervalSelected;
 
@@ -105,6 +105,7 @@ public class CryptoDetailView extends VBox {
         x.setTickLabelRotation(45);
         x.setTickMarkVisible(true);
         x.setTickLabelsVisible(true);
+        chart.setAnimated(false);
         return chart;
     }
 
@@ -169,7 +170,7 @@ public class CryptoDetailView extends VBox {
         });
         return grid;
     }
-    
+
     /**
      * Set callback for when user selects a time interval
      */
@@ -212,41 +213,46 @@ public class CryptoDetailView extends VBox {
         if (hd == null || hd.getPoints().isEmpty()) {
             return;
         }
-        
+
         // Determine the interval based on current selection
         String interval = selectedIntervalButton != null ? selectedIntervalButton.getText() : "1D";
         String days = convertIntervalToDays(interval);
-        
+
         final boolean useVolume = this.showingVolume;
         final DateTimeFormatter formatter = chooseFormatter(days);
-        
+
         XYChart.Series<Number, Number> priceSeries = new XYChart.Series<>();
         XYChart.Series<String, Number> volumeSeries = new XYChart.Series<>();
-        
+
         long minX = Long.MAX_VALUE, maxX = Long.MIN_VALUE;
         double minY = Double.POSITIVE_INFINITY, maxY = Double.NEGATIVE_INFINITY;
-        
+
         for (ChartPoint p : hd.getPoints()) {
             Double value = useVolume ? p.getVolume() : p.getPrice();
-            if (value == null) continue;
+            if (value == null)
+                continue;
             long x = p.getEpochMilli();
-            
+
             // Format timestamp for both charts
             String formattedTime = formatter.format(Instant.ofEpochMilli(x));
-            
+
             if (useVolume) {
                 volumeSeries.getData().add(new XYChart.Data<>(formattedTime, value));
             } else {
                 priceSeries.getData().add(new XYChart.Data<>(x, value));
             }
-            
-            if (x < minX) minX = x;
-            if (x > maxX) maxX = x;
-            if (value < minY) minY = value;
-            if (value > maxY) maxY = value;
+
+            if (x < minX)
+                minX = x;
+            if (x > maxX)
+                maxX = x;
+            if (value < minY)
+                minY = value;
+            if (value > maxY)
+                maxY = value;
         }
 
-                final long fMinX = minX, fMaxX = maxX;
+        final long fMinX = minX, fMaxX = maxX;
         final double fMinY = minY, fMaxY = maxY;
         Platform.runLater(() -> {
             // choose which chart to populate
@@ -257,7 +263,9 @@ public class CryptoDetailView extends VBox {
                     chartHolder.getChildren().setAll(volumeChart);
                 }
                 volumeChart.getData().clear();
-                
+
+                ((CategoryAxis) volumeChart.getXAxis()).getCategories().clear();
+
                 // Sample the data to reduce label crowding
                 XYChart.Series<String, Number> sampledSeries = new XYChart.Series<>();
                 int sampleRate = calculateSampleRate(volumeSeries.getData().size(), days);
@@ -277,11 +285,37 @@ public class CryptoDetailView extends VBox {
 
             // adjust Y axis to min/max with padding
             NumberAxis yAxis = (NumberAxis) (useVolume ? volumeChart.getYAxis() : priceChart.getYAxis());
-            if (!Double.isInfinite(fMinY) && !Double.isInfinite(fMaxY)) {
+
+            if (useVolume) {
+                // For volume, always start at 0
+                yAxis.setAutoRanging(false);
+                yAxis.setLowerBound(0);
+                // Add some padding to the top
+                double upperY = fMaxY * 1.1;
+                if (upperY <= 0)
+                    upperY = 100; // default if no data
+                yAxis.setUpperBound(upperY);
+                yAxis.setTickUnit(upperY / 5.0);
+
+                // Format tick labels
+                yAxis.setTickLabelFormatter(new StringConverter<Number>() {
+                    @Override
+                    public String toString(Number object) {
+                        return formatVolume(object.doubleValue());
+                    }
+
+                    @Override
+                    public Number fromString(String string) {
+                        return 0;
+                    }
+                });
+            } else if (!Double.isInfinite(fMinY) && !Double.isInfinite(fMaxY)) {
+                // Price chart logic (unchanged mostly)
                 double lowerY = fMinY;
                 double upperY = fMaxY;
                 double padding = (upperY - lowerY) * 0.10;
-                if (padding == 0) padding = Math.max(1.0, upperY * 0.05);
+                if (padding == 0)
+                    padding = Math.max(1.0, upperY * 0.05);
                 lowerY = lowerY - padding;
                 upperY = upperY + padding;
                 yAxis.setAutoRanging(false);
@@ -289,6 +323,8 @@ public class CryptoDetailView extends VBox {
                 yAxis.setUpperBound(upperY);
                 yAxis.setTickUnit(Math.max(1.0, (upperY - lowerY) / 8.0));
                 yAxis.setForceZeroInRange(false);
+                // Reset formatter for price chart if needed (though it's usually default)
+                yAxis.setTickLabelFormatter(null);
             } else {
                 yAxis.setAutoRanging(true);
             }
@@ -297,9 +333,11 @@ public class CryptoDetailView extends VBox {
             if (!useVolume) {
                 NumberAxis xAxis = (NumberAxis) priceChart.getXAxis();
                 xAxis.setTickLabelFormatter(new StringConverter<Number>() {
+
                     @Override
                     public String toString(Number object) {
-                        if (object == null) return "";
+                        if (object == null)
+                            return "";
                         try {
                             return formatter.format(Instant.ofEpochMilli(object.longValue()));
                         } catch (Exception e) {
@@ -315,6 +353,7 @@ public class CryptoDetailView extends VBox {
 
                 // adjust X axis to the data range
                 if (fMinX != Long.MAX_VALUE && fMaxX != Long.MIN_VALUE) {
+
                     double lowerX = fMinX;
                     double upperX = fMaxX;
                     if (lowerX == upperX) {
@@ -325,19 +364,21 @@ public class CryptoDetailView extends VBox {
                     xAxis.setAutoRanging(false);
                     xAxis.setLowerBound(lowerX);
                     xAxis.setUpperBound(upperX);
-                    double tick = Math.max(1.0, (upperX - lowerX) / 6.0);
+                    double tick = Math.max(1.0,
+                            (upperX - lowerX) / 6.0);
                     xAxis.setTickUnit(tick);
                 } else {
                     xAxis.setAutoRanging(true);
                 }
             } else {
-                CategoryAxis xAxis = (CategoryAxis) volumeChart.getXAxis();
+                CategoryAxis xAxis = (CategoryAxis) volumeChart
+                        .getXAxis();
                 xAxis.setAutoRanging(true);
                 xAxis.setTickMarkVisible(true);
             }
         });
     }
-    
+
     private String convertIntervalToDays(String interval) {
         return switch (interval) {
             case "1D" -> "1";
@@ -345,77 +386,75 @@ public class CryptoDetailView extends VBox {
             case "1M" -> "30";
             case "3M" -> "90";
             case "1Y" -> "365";
-            case "All" -> "max";
             default -> "1";
         };
-    }     private void setShowingVolume(boolean v) {
-         if (this.showingVolume == v) return;
-         this.showingVolume = v;
+    }
 
-         if (v) {
-             volumeToggle.getStyleClass().add("chart-toggle-selected");
-             priceToggle.getStyleClass().remove("chart-toggle-selected");
-         } else {
-             priceToggle.getStyleClass().add("chart-toggle-selected");
-             volumeToggle.getStyleClass().remove("chart-toggle-selected");
-         }
-         // Request new data from controller
-         String interval = (selectedIntervalButton != null) ? selectedIntervalButton.getText() : "1D";
-         if (onIntervalSelected != null) {
-             onIntervalSelected.accept(interval);
-         }
-     }
+    private void setShowingVolume(boolean v) {
+        if (this.showingVolume == v)
+            return;
+        this.showingVolume = v;
 
-     private void selectInterval(Button button, String interval) {
-         if (selectedIntervalButton != null) {
-             selectedIntervalButton.getStyleClass().remove("time-interval-selected");
-         }
-         selectedIntervalButton = button;
-         if (selectedIntervalButton != null) {
-             selectedIntervalButton.getStyleClass().add("time-interval-selected");
-         }
-         // Notify controller about interval change
-         if (onIntervalSelected != null) {
-             onIntervalSelected.accept(interval);
-         }
-     }
+        if (v) {
+            volumeToggle.getStyleClass().add("chart-toggle-selected");
+            priceToggle.getStyleClass().remove("chart-toggle-selected");
+        } else {
+            priceToggle.getStyleClass().add("chart-toggle-selected");
+            volumeToggle.getStyleClass().remove("chart-toggle-selected");
+        }
+        // Request new data from controller
+        String interval = (selectedIntervalButton != null) ? selectedIntervalButton.getText() : "1D";
+        if (onIntervalSelected != null) {
+            onIntervalSelected.accept(interval);
+        }
+    }
 
-     private void clear() {
-         titleLabel.setText("Select a crypto");
-         priceLabel.setText("");
-         changeLabel.setText("");
-         priceChart.getData().clear();
-         volumeChart.getData().clear();
-         marketCapValue.setText("");
-         volumeValue.setText("");
-         circulatingSupplyValue.setText("");
-     }
+    private void selectInterval(Button button, String interval) {
+        if (selectedIntervalButton != null) {
+            selectedIntervalButton.getStyleClass().remove("time-interval-selected");
+        }
+        selectedIntervalButton = button;
+        if (selectedIntervalButton != null) {
+            selectedIntervalButton.getStyleClass().add("time-interval-selected");
+        }
+        // Notify controller about interval change
+        if (onIntervalSelected != null) {
+            onIntervalSelected.accept(interval);
+        }
+    }
 
-     private static DateTimeFormatter chooseFormatter(String days) {
-         try {
-             if ("max".equals(days)) {
-                 return DateTimeFormatter.ofPattern("MMM yyyy").withZone(ZoneId.systemDefault());
-             } else {
-                 int d = Integer.parseInt(days);
-                 if (d <= 1) {
-                     return DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault());
-                 } else if (d <= 7) {
-                     return DateTimeFormatter.ofPattern("EEE HH:mm").withZone(ZoneId.systemDefault());
-                 } else if (d <= 90) {
-                     return DateTimeFormatter.ofPattern("MMM d").withZone(ZoneId.systemDefault());
-                 } else if (d <= 365) {
-                     return DateTimeFormatter.ofPattern("MMM d").withZone(ZoneId.systemDefault());
-                 } else {
-                     return DateTimeFormatter.ofPattern("MMM yyyy").withZone(ZoneId.systemDefault());
-                 }
-             }
-         } catch (Exception ex) {
-             return DateTimeFormatter.ofPattern("MMM d").withZone(ZoneId.systemDefault());
-         }
-     }
+    private void clear() {
+        titleLabel.setText("Select a crypto");
+        priceLabel.setText("");
+        changeLabel.setText("");
+        priceChart.getData().clear();
+        volumeChart.getData().clear();
+        marketCapValue.setText("");
+        volumeValue.setText("");
+        circulatingSupplyValue.setText("");
+    }
+
+    private static DateTimeFormatter chooseFormatter(String days) {
+        try {
+            int d = Integer.parseInt(days);
+            if (d <= 1) {
+                return DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault());
+            } else if (d <= 7) {
+                return DateTimeFormatter.ofPattern("EEE HH:mm").withZone(ZoneId.systemDefault());
+            } else if (d <= 90) {
+                return DateTimeFormatter.ofPattern("MMM d").withZone(ZoneId.systemDefault());
+            } else if (d <= 365) {
+                return DateTimeFormatter.ofPattern("MMM d").withZone(ZoneId.systemDefault());
+            } else {
+                return DateTimeFormatter.ofPattern("MMM yyyy").withZone(ZoneId.systemDefault());
+            }
+        } catch (Exception ex) {
+            return DateTimeFormatter.ofPattern("MMM d").withZone(ZoneId.systemDefault());
+        }
+    }
 
     private int calculateSampleRate(int totalPoints, String days) {
-        int targetLabels = 15;
+        int targetLabels = 50;
         try {
             if (totalPoints <= targetLabels) {
                 return 1;
@@ -423,16 +462,38 @@ public class CryptoDetailView extends VBox {
 
             int d = Integer.parseInt(days);
 
-            if (d <= 1) return Math.max(1, totalPoints / targetLabels);
-            else if (d <= 7) return 2;   // Sample every 2nd point for 1W interval
-            else if (d <= 30) return 3;  // Sample every 3rd point for 1M interval
-            else if (d <= 90) return 6;  // Sample every 6th point for 3M interval
-            else if (d <= 365) return 12; // Sample every 12th point for 1Y interval
-            else return 24;               // For "All" interval, sample every 24th point
+            if (d <= 1)
+                return Math.max(1, totalPoints / targetLabels);
+            else if (d <= 7)
+                return 1; // Sample every point for 1W interval
+            else if (d <= 30)
+                return 2; // Sample every 2nd point for 1M interval
+            else if (d <= 90)
+                return 3; // Sample every 3rd point for 3M interval
+            else
+                return 6; // Sample every 6th point for 1Y interval
         } catch (Exception e) {
             // Default to no sampling on error
             return 1;
         }
     }
 
- }
+    private String formatVolume(double value) {
+        if (Double.isNaN(value) || Double.isInfinite(value) || value <= 0)
+            return "0";
+        double abs = Math.abs(value);
+        java.text.DecimalFormat df = new java.text.DecimalFormat("#,##0.##");
+        if (abs >= 1_000_000_000_000.0) {
+            return df.format(value / 1_000_000_000_000.0) + "T";
+        } else if (abs >= 1_000_000_000.0) {
+            return df.format(value / 1_000_000_000.0) + "B";
+        } else if (abs >= 1_000_000.0) {
+            return df.format(value / 1_000_000.0) + "M";
+        } else if (abs >= 1_000.0) {
+            return df.format(value / 1_000.0) + "K";
+        } else {
+            return df.format(value);
+        }
+    }
+
+}
