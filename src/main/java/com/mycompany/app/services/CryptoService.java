@@ -27,8 +27,34 @@ public class CryptoService {
     private final HttpClient httpClient = HttpClient.newHttpClient();
     private final ObjectMapper mapper = new ObjectMapper();
     private final Properties props = loadProperties();
+    private final CryptoCache cache;
+
+    public CryptoService() {
+        this.cache = new CryptoCache();
+    }
+
+    public CryptoService(CryptoCache cache) {
+        this.cache = cache != null ? cache : new CryptoCache();
+    }
 
     public List<Crypto> getTopCryptos() {
+        // Check cache first
+        if (cache.hasTopCryptos()) {
+            return cache.getTopCryptos();
+        }
+
+        // Fetch from API
+        List<Crypto> cryptos = fetchTopCryptosFromAPI();
+        
+        // Store in cache
+        if (cryptos != null && !cryptos.isEmpty()) {
+            cache.setTopCryptos(cryptos);
+        }
+        
+        return cryptos;
+    }
+
+    private List<Crypto> fetchTopCryptosFromAPI() {
         try {
             String baseUrl = props.getProperty("coingecko.api.url", DEFAULT_API_URL);
             String url = String.format("%s/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=%d&page=1&sparkline=false&price_change_percentage=24h", baseUrl, TOP_N);
@@ -88,42 +114,383 @@ public class CryptoService {
     }
 
     /**
+     * Check if historical data is available in cache for a specific crypto and interval
+     */
+    public boolean hasHistoricalData(String id, String days) {
+        if (id == null || id.isBlank() || days == null || days.isBlank()) {
+            return false;
+        }
+        return cache.hasHistoricalData(id, days);
+    }
+
+    /**
      * fetch market_chart data for a single crypto id.
      * days accepts numeric day strings. Null/blank => "1".
+     * Checks cache first before making API call.
+     * Implements lazy loading: only fetches from API if not in cache.
      */
     public HistoricalData getHistoricalDataForCrypto(String id, String days) {
         if (id == null || id.isBlank()) return new HistoricalData(null);
         if (days == null || days.isBlank()) days = "1";
-        String baseUrl = props.getProperty("coingecko.api.url", DEFAULT_API_URL);
-        try {
-            String url = String.format("%s/coins/%s/market_chart?vs_currency=usd&days=%s", baseUrl, id, days);
 
-            HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .GET();
-
-            
-            /* 
-            String apiKey = props.getProperty("coingecko.api.key");
-            if (apiKey != null && !apiKey.isBlank()) {
-                reqBuilder.header("X-CG-API-KEY", apiKey);
-                reqBuilder.header("Authorization", "Bearer " + apiKey);
-            }
-            */
-
-            HttpRequest request = reqBuilder.build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-
-            if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                return parseMarketChartJson(response.body());
-            } else {
-                System.err.println("CoinGecko market_chart returned non-2xx for " + id + ": " + response.statusCode());
-                return new HistoricalData(null);
-            }
-        } catch (IOException | InterruptedException e) {
-            System.err.println("Failed to fetch market_chart for " + id + ": " + e.getMessage());
-            return new HistoricalData(null);
+        // Check cache first - if found, return immediately (no API call)
+        if (cache.hasHistoricalData(id, days)) {
+            return cache.getHistoricalData(id, days);
         }
+
+        // Not in cache - fetch from API (lazy loading)
+        // This happens when user selects a time interval that wasn't preloaded
+        System.out.println("Loading historical data for " + id + " (days=" + days + ") from API...");
+        HistoricalData data = fetchHistoricalDataFromAPI(id, days);
+        
+        // Store in cache for future use
+        if (data != null && data.getPoints() != null && !data.getPoints().isEmpty()) {
+            cache.putHistoricalData(id, days, data);
+            System.out.println("Successfully loaded and cached data for " + id + " (days=" + days + ")");
+        } else {
+            System.err.println("Failed to load data for " + id + " (days=" + days + ")");
+        }
+        
+        return data;
+    }
+
+    private HistoricalData fetchHistoricalDataFromAPI(String id, String days) {
+        String baseUrl = props.getProperty("coingecko.api.url", DEFAULT_API_URL);
+        int maxRetries = 5; // Initial attempt + 4 retries
+        // Retry delays: 10s, 20s, 30s, 30s (exponential backoff, then constant)
+        int[] retryDelays = {10000, 20000, 30000, 30000}; // 10s, 20s, 30s, 30s
+        
+        for (int attempt = 0; attempt < maxRetries; attempt++) {
+            try {
+                String url = String.format("%s/coins/%s/market_chart?vs_currency=usd&days=%s", baseUrl, id, days);
+
+                HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .GET();
+
+                
+                /* 
+                String apiKey = props.getProperty("coingecko.api.key");
+                if (apiKey != null && !apiKey.isBlank()) {
+                    reqBuilder.header("X-CG-API-KEY", apiKey);
+                    reqBuilder.header("Authorization", "Bearer " + apiKey);
+                }
+                */
+
+                HttpRequest request = reqBuilder.build();
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+
+                if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                    return parseMarketChartJson(response.body());
+                } else {
+                    // Any non-2xx status code (including 429 rate limit) - retry with increasing delay
+                    if (attempt < maxRetries - 1) {
+                        int delay = retryDelays[attempt];
+                        String statusMsg = response.statusCode() == 429 ? "Rate limit exceeded" : "API returned status " + response.statusCode();
+                        System.out.println(statusMsg + " for " + id + ". Waiting " + (delay / 1000) + " seconds before retry " + (attempt + 2) + "/" + maxRetries);
+                        try {
+                            Thread.sleep(delay);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            return new HistoricalData(null);
+                        }
+                        continue; // Retry the request
+                    } else {
+                        // All retries exhausted
+                        System.err.println("Failed to fetch market_chart for " + id + " after " + maxRetries + " attempts. Last status: " + response.statusCode());
+                        return new HistoricalData(null);
+                    }
+                }
+            } catch (IOException | InterruptedException e) {
+                // Network errors or interruptions - retry with increasing delay
+                if (attempt < maxRetries - 1) {
+                    int delay = retryDelays[attempt];
+                    System.out.println("Network error for " + id + " (" + e.getMessage() + "). Waiting " + (delay / 1000) + " seconds before retry " + (attempt + 2) + "/" + maxRetries);
+                    try {
+                        Thread.sleep(delay);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return new HistoricalData(null);
+                    }
+                    continue; // Retry the request
+                } else {
+                    // All retries exhausted
+                    System.err.println("Failed to fetch market_chart for " + id + " after " + maxRetries + " attempts: " + e.getMessage());
+                    return new HistoricalData(null);
+                }
+            }
+        }
+        
+        return new HistoricalData(null);
+    }
+
+    /**
+     * Callback interface for notifying when a crypto's data is loaded
+     */
+    public interface DataLoadedCallback {
+        void onDataLoaded(String cryptoId, boolean success);
+        void onIntervalDataLoaded(String cryptoId, String interval, boolean success);
+    }
+
+    private DataLoadedCallback dataLoadedCallback;
+    
+    // Track failed data loads for retry
+    private final java.util.List<FailedDataLoad> failedLoads = new java.util.ArrayList<>();
+    
+    // Track interval loading progress: map of interval -> count of loaded cryptos
+    private final java.util.Map<String, Integer> intervalLoadCounts = new java.util.HashMap<>();
+    private int totalCryptoCount = 0;
+    
+    private static class FailedDataLoad {
+        final String cryptoId;
+        final String days;
+        final String intervalName;
+        
+        FailedDataLoad(String cryptoId, String days, String intervalName) {
+            this.cryptoId = cryptoId;
+            this.days = days;
+            this.intervalName = intervalName;
+        }
+    }
+
+    /**
+     * Set callback to be notified when crypto data is loaded
+     */
+    public void setDataLoadedCallback(DataLoadedCallback callback) {
+        this.dataLoadedCallback = callback;
+    }
+    
+    /**
+     * Retry loading failed data
+     */
+    public void retryFailedLoads() {
+        if (failedLoads.isEmpty()) {
+            System.out.println("No failed loads to retry.");
+            return;
+        }
+        
+        System.out.println("Retrying " + failedLoads.size() + " failed data loads...");
+        int delayBetweenCalls = 5000; // 5 seconds
+        
+        java.util.List<FailedDataLoad> toRetry = new java.util.ArrayList<>(failedLoads);
+        failedLoads.clear();
+        
+        for (FailedDataLoad failed : toRetry) {
+            try {
+                System.out.println("Retrying " + failed.intervalName + " data for " + failed.cryptoId + "...");
+                HistoricalData data = fetchHistoricalDataFromAPI(failed.cryptoId, failed.days);
+                boolean success = false;
+                if (data != null && data.getPoints() != null && !data.getPoints().isEmpty()) {
+                    cache.putHistoricalData(failed.cryptoId, failed.days, data);
+                    System.out.println("✓ Successfully loaded " + failed.intervalName + " data for " + failed.cryptoId);
+                    success = true;
+                    // Increment load count for this interval
+                    intervalLoadCounts.put(failed.intervalName, intervalLoadCounts.getOrDefault(failed.intervalName, 0) + 1);
+                } else {
+                    System.err.println("✗ Still failed to load " + failed.intervalName + " data for " + failed.cryptoId);
+                    // Add back to failed list
+                    failedLoads.add(failed);
+                }
+                
+                // Notify callback only if all cryptos have loaded this interval
+                if (dataLoadedCallback != null && success) {
+                    String interval = convertDaysToInterval(failed.days);
+                    int loadedCount = intervalLoadCounts.getOrDefault(failed.intervalName, 0);
+                    // Enable interval button only when all cryptos have loaded this interval
+                    if (loadedCount == totalCryptoCount) {
+                        dataLoadedCallback.onIntervalDataLoaded(null, failed.intervalName, true); // null cryptoId means all loaded
+                    }
+                }
+                
+                // Wait between calls
+                if (toRetry.indexOf(failed) < toRetry.size() - 1) {
+                    Thread.sleep(delayBetweenCalls);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                System.err.println("Interrupted while retrying data for " + failed.cryptoId);
+                break;
+            } catch (Exception e) {
+                System.err.println("Error retrying " + failed.intervalName + " data for " + failed.cryptoId + ": " + e.getMessage());
+                // Add back to failed list
+                failedLoads.add(failed);
+            }
+        }
+        
+        System.out.println("Retry complete. " + failedLoads.size() + " loads still failed.");
+    }
+    
+    private String convertDaysToInterval(String days) {
+        return switch (days) {
+            case "1" -> "1D";
+            case "7" -> "1W";
+            case "30" -> "1M";
+            case "90" -> "3M";
+            case "365" -> "1Y";
+            default -> "1D";
+        };
+    }
+
+    /**
+     * Preload cryptocurrency data at startup
+     * Loads data in phases: first all 1D data, then longer intervals
+     * Makes API calls with 5 second delay between calls
+     * 
+     * CoinGecko free API limit: 5-15 calls per minute
+     * Strategy: 5 second delay = 12 calls/min (safe margin)
+     */
+    public void preloadAllData() {
+        System.out.println("Preloading cryptocurrency data...");
+        
+        // Fetch top cryptos (1 API call)
+        List<Crypto> cryptos = getTopCryptos();
+        totalCryptoCount = cryptos.size();
+        System.out.println("Loaded " + cryptos.size() + " cryptocurrencies");
+        
+        // Initialize interval load counts
+        intervalLoadCounts.clear();
+        intervalLoadCounts.put("1D", 0);
+        intervalLoadCounts.put("1W", 0);
+        intervalLoadCounts.put("1M", 0);
+        intervalLoadCounts.put("3M", 0);
+        intervalLoadCounts.put("1Y", 0);
+        
+        // Time intervals to load (in order: 1D first, then longer intervals)
+        String[] intervals = {"1", "7", "30", "90", "365"}; // 1D, 1W, 1M, 3M, 1Y
+        String[] intervalNames = {"1D", "1W", "1M", "3M", "1Y"};
+        
+        // Delay between API calls: 5 seconds = 12 calls/min (safe margin under 15 calls/min limit)
+        int delayBetweenCalls = 5000; // 5 seconds
+        
+        // Phase 1: Load 1D data for all cryptos first
+        System.out.println("Phase 1: Loading 1D data for all cryptos...");
+        for (Crypto crypto : cryptos) {
+            System.out.println("Loading 1D data for " + crypto.getName() + "...");
+            try {
+                HistoricalData data = fetchHistoricalDataFromAPI(crypto.getId(), "1");
+                boolean success = false;
+                if (data != null && data.getPoints() != null && !data.getPoints().isEmpty()) {
+                    cache.putHistoricalData(crypto.getId(), "1", data);
+                    System.out.println("✓ Successfully loaded 1D data for " + crypto.getName());
+                    success = true;
+                    // Increment load count for 1D
+                    intervalLoadCounts.put("1D", intervalLoadCounts.get("1D") + 1);
+                } else {
+                    System.err.println("✗ Failed to load 1D data for " + crypto.getName());
+                }
+                
+                // Notify callback that this crypto's 1D data is loaded
+                if (dataLoadedCallback != null) {
+                    dataLoadedCallback.onDataLoaded(crypto.getId(), success);
+                    // Check if all 1D data is loaded (1D is always enabled, but we track it anyway)
+                    if (intervalLoadCounts.get("1D") == totalCryptoCount) {
+                        dataLoadedCallback.onIntervalDataLoaded(null, "1D", true); // null cryptoId means all loaded
+                    }
+                }
+                
+                // Wait 5 seconds before next call (except for last crypto in phase 1)
+                if (cryptos.indexOf(crypto) < cryptos.size() - 1) {
+                    Thread.sleep(delayBetweenCalls);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                System.err.println("Interrupted while preloading 1D data for " + crypto.getName());
+                break;
+            } catch (Exception e) {
+                System.err.println("Failed to preload 1D data for " + crypto.getName() + ": " + e.getMessage());
+                // Notify callback even on failure
+                if (dataLoadedCallback != null) {
+                    dataLoadedCallback.onDataLoaded(crypto.getId(), false);
+                }
+            }
+        }
+        
+        System.out.println("Phase 1 complete! All cryptos now have 1D data available.");
+        System.out.println("Phase 2: Loading longer intervals (1W, 1M, 3M, 1Y)...");
+        
+        // Phase 2: Load longer intervals for all cryptos
+        // Skip 1D (index 0) since we already loaded it
+        for (int i = 1; i < intervals.length; i++) {
+            String days = intervals[i];
+            String intervalName = intervalNames[i];
+            
+            System.out.println("Loading " + intervalName + " data for all cryptos...");
+            
+            for (Crypto crypto : cryptos) {
+                System.out.println("Loading " + intervalName + " data for " + crypto.getName() + "...");
+                try {
+                    HistoricalData data = fetchHistoricalDataFromAPI(crypto.getId(), days);
+                    boolean success = false;
+                    if (data != null && data.getPoints() != null && !data.getPoints().isEmpty()) {
+                        cache.putHistoricalData(crypto.getId(), days, data);
+                        System.out.println("✓ Successfully loaded " + intervalName + " data for " + crypto.getName());
+                        success = true;
+                        // Increment load count for this interval
+                        intervalLoadCounts.put(intervalName, intervalLoadCounts.get(intervalName) + 1);
+                    } else {
+                        System.err.println("✗ Failed to load " + intervalName + " data for " + crypto.getName());
+                        // Track failed load for retry
+                        failedLoads.add(new FailedDataLoad(crypto.getId(), days, intervalName));
+                    }
+                    
+                    // Notify callback about interval data load
+                    // Only enable interval button when ALL cryptos have loaded this interval
+                    if (dataLoadedCallback != null) {
+                        int loadedCount = intervalLoadCounts.get(intervalName);
+                        // Enable interval button only when all cryptos have loaded this interval
+                        if (loadedCount == totalCryptoCount) {
+                            dataLoadedCallback.onIntervalDataLoaded(null, intervalName, true); // null cryptoId means all loaded
+                        }
+                    }
+                    
+                    // Wait 5 seconds before next call (except for last call)
+                    if (i < intervals.length - 1 || cryptos.indexOf(crypto) < cryptos.size() - 1) {
+                        Thread.sleep(delayBetweenCalls);
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    System.err.println("Interrupted while preloading " + intervalName + " data for " + crypto.getName());
+                    return;
+                } catch (Exception e) {
+                    System.err.println("Failed to preload " + intervalName + " data for " + crypto.getName() + ": " + e.getMessage());
+                    // Track failed load for retry
+                    failedLoads.add(new FailedDataLoad(crypto.getId(), days, intervalName));
+                    // Don't notify callback about individual failures - we only enable when all succeed
+                }
+            }
+        }
+        
+        System.out.println("All data preloading complete!");
+        
+        // Retry failed loads once
+        if (!failedLoads.isEmpty()) {
+            System.out.println("Retrying " + failedLoads.size() + " failed data loads...");
+            retryFailedLoads();
+        }
+        
+        // Notify that preloading is complete
+        // Refresh button should be visible when all data is loaded (no failed loads)
+        if (dataLoadedCallback != null && failedLoads.isEmpty()) {
+            // Signal that all data is loaded - refresh button can be shown
+            javafx.application.Platform.runLater(() -> {
+                // This will be handled by the callback in App.java
+            });
+        }
+    }
+    
+    /**
+     * Get count of failed data loads
+     */
+    public int getFailedLoadsCount() {
+        return failedLoads.size();
+    }
+    
+    /**
+     * Clear cache to allow refreshing all data
+     */
+    public void clearCache() {
+        cache.clear();
+        failedLoads.clear();
     }
 
     private Properties loadProperties() {

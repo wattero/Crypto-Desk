@@ -22,6 +22,7 @@ import java.net.URISyntaxException;
 public class CryptoListView extends VBox {
     private final VBox cryptoListBox = new VBox(8);
     private HBox selectedSidebarItem = null;
+    private final java.util.Map<String, HBox> cryptoItems = new java.util.HashMap<>();
 
     // Callback for when a crypto is selected
     private Consumer<Crypto> onCryptoSelected;
@@ -79,15 +80,37 @@ public class CryptoListView extends VBox {
 
     /**
      * Load crypto list into sidebar
+     * All items start as disabled (grayed out) until their data is loaded
      */
     public void displayCryptos(List<Crypto> cryptos) {
         cryptoListBox.getChildren().clear();
+        cryptoItems.clear();
         for (Crypto crypto : cryptos) {
-            cryptoListBox.getChildren().add(createSidebarItem(crypto));
+            HBox item = createSidebarItem(crypto);
+            cryptoListBox.getChildren().add(item);
+            cryptoItems.put(crypto.getId(), item);
+            // Start with disabled state (grayed out)
+            setCryptoEnabled(crypto.getId(), false);
         }
+    }
 
-        if (!cryptos.isEmpty()) {
-            selectCrypto(cryptos.get(0), (HBox) cryptoListBox.getChildren().get(0));
+    /**
+     * Enable/disable a crypto item based on whether its data is loaded
+     */
+    public void setCryptoEnabled(String cryptoId, boolean enabled) {
+        HBox item = cryptoItems.get(cryptoId);
+        if (item != null) {
+            if (enabled) {
+                item.getStyleClass().remove("sidebar-item-disabled");
+                item.setDisable(false);
+                // Make it brighter when enabled
+                item.setOpacity(1.0);
+            } else {
+                item.getStyleClass().add("sidebar-item-disabled");
+                item.setDisable(true);
+                // Make it grayed out when disabled
+                item.setOpacity(0.5);
+            }
         }
     }
 
@@ -122,6 +145,11 @@ public class CryptoListView extends VBox {
     }
 
     private void selectCrypto(Crypto crypto, HBox item) {
+        // Don't allow selection if item is disabled
+        if (item.isDisable()) {
+            return;
+        }
+
         if (selectedSidebarItem != null) {
             selectedSidebarItem.getStyleClass().remove("sidebar-item-selected");
         }

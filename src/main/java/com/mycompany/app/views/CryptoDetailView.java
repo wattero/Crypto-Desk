@@ -37,7 +37,9 @@ public class CryptoDetailView extends VBox {
     private boolean showingVolume = false;
     private final String[] timeIntervals = { "1D", "1W", "1M", "3M", "1Y" };
     private final java.util.List<Button> intervalButtons = new java.util.ArrayList<>();
+    private final java.util.Map<String, Button> intervalButtonMap = new java.util.HashMap<>();
     private Button selectedIntervalButton = null;
+    private Button refreshButton;
 
     private final Label marketCapValue = new Label();
     private final Label volumeValue = new Label();
@@ -45,6 +47,8 @@ public class CryptoDetailView extends VBox {
 
     // Callback for when user selects a time interval
     private Consumer<String> onIntervalSelected;
+    // Callback for refresh button
+    private Runnable onRefreshRequested;
 
     public CryptoDetailView() {
         super(20);
@@ -71,9 +75,38 @@ public class CryptoDetailView extends VBox {
         HBox toggles = createChartToggle();
         HBox intervals = createTimeIntervalButtons();
         GridPane infoGrid = createInfoGrid();
+        refreshButton = createRefreshButton();
 
         // add toggle above the chart holder
-        getChildren().addAll(header, priceInfo, toggles, chartHolder, intervals, infoGrid);
+        getChildren().addAll(header, priceInfo, toggles, chartHolder, intervals, infoGrid, refreshButton);
+    }
+    
+    private Button createRefreshButton() {
+        Button button = new Button("Refresh Data");
+        button.getStyleClass().add("refresh-button");
+        button.setVisible(false); // Hidden by default, shown when there are failed loads
+        button.setOnAction(e -> {
+            if (onRefreshRequested != null) {
+                onRefreshRequested.run();
+            }
+        });
+        return button;
+    }
+    
+    /**
+     * Set callback for refresh button
+     */
+    public void setOnRefreshRequested(Runnable callback) {
+        this.onRefreshRequested = callback;
+    }
+    
+    /**
+     * Show/hide refresh button
+     */
+    public void setRefreshButtonVisible(boolean visible) {
+        if (refreshButton != null) {
+            refreshButton.setVisible(visible);
+        }
     }
 
     private LineChart<Number, Number> createPriceChart() {
@@ -137,13 +170,37 @@ public class CryptoDetailView extends VBox {
             button.getStyleClass().add("time-interval-button");
             button.setOnAction(e -> selectInterval(button, interval));
             intervalButtons.add(button);
+            intervalButtonMap.put(interval, button);
             buttonBox.getChildren().add(button);
+            
+            // Start with disabled state (except 1D which is loaded first)
+            if (!interval.equals("1D")) {
+                setIntervalEnabled(interval, false);
+            }
         }
 
         if (!intervalButtons.isEmpty()) {
             selectInterval(intervalButtons.get(0), timeIntervals[0]);
         }
         return buttonBox;
+    }
+    
+    /**
+     * Enable/disable a time interval button based on whether its data is loaded
+     */
+    public void setIntervalEnabled(String interval, boolean enabled) {
+        Button button = intervalButtonMap.get(interval);
+        if (button != null) {
+            if (enabled) {
+                button.setDisable(false);
+                button.setOpacity(1.0);
+                button.getStyleClass().remove("time-interval-button-disabled");
+            } else {
+                button.setDisable(true);
+                button.setOpacity(0.5);
+                button.getStyleClass().add("time-interval-button-disabled");
+            }
+        }
     }
 
     private GridPane createInfoGrid() {
@@ -197,11 +254,35 @@ public class CryptoDetailView extends VBox {
         volumeValue.setText(crypto.getVolume());
         circulatingSupplyValue.setText(crypto.getCirculatingSupply());
 
-        // Trigger initial data load
-        if (selectedIntervalButton != null) {
+        // 1D data is always loaded first, so enable it
+        setIntervalEnabled("1D", true);
+
+        // Check if currently selected interval is available for this crypto
+        // If not, fall back to 1D
+        if (selectedIntervalButton != null && !selectedIntervalButton.isDisable()) {
             String interval = selectedIntervalButton.getText();
+            // Try to use selected interval - controller will fall back to 1D if not available
             if (onIntervalSelected != null) {
                 onIntervalSelected.accept(interval);
+            }
+        } else {
+            // If no interval is selected or selected is disabled, select 1D
+            selectIntervalIfEnabled("1D");
+        }
+    }
+    
+    /**
+     * Select an interval if it's enabled, otherwise fall back to 1D
+     */
+    public void selectIntervalIfEnabled(String interval) {
+        Button button = intervalButtonMap.get(interval);
+        if (button != null && !button.isDisable()) {
+            selectInterval(button, interval);
+        } else {
+            // Fall back to 1D
+            Button oneDayButton = intervalButtonMap.get("1D");
+            if (oneDayButton != null && !oneDayButton.isDisable()) {
+                selectInterval(oneDayButton, "1D");
             }
         }
     }
@@ -410,6 +491,11 @@ public class CryptoDetailView extends VBox {
     }
 
     private void selectInterval(Button button, String interval) {
+        // Don't allow selection if button is disabled
+        if (button.isDisable()) {
+            return;
+        }
+        
         if (selectedIntervalButton != null) {
             selectedIntervalButton.getStyleClass().remove("time-interval-selected");
         }

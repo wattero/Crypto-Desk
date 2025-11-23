@@ -60,8 +60,82 @@ public class App extends Application {
         // Set host services for opening URLs
         mainView.setHostServices(getHostServices());
 
-        // Load initial data - MainController handles this now
+        // Load initial data immediately so UI shows something
         mainController.loadInitialData();
+
+        // Set up callback to enable crypto buttons and interval buttons when their data is loaded
+        cryptoService.setDataLoadedCallback(new com.mycompany.app.services.CryptoService.DataLoadedCallback() {
+            @Override
+            public void onDataLoaded(String cryptoId, boolean success) {
+                javafx.application.Platform.runLater(() -> {
+                    if (success) {
+                        cryptoListView.setCryptoEnabled(cryptoId, true);
+                    }
+                });
+            }
+            
+            @Override
+            public void onIntervalDataLoaded(String cryptoId, String interval, boolean success) {
+                javafx.application.Platform.runLater(() -> {
+                    // Enable interval button only when all cryptos have loaded this interval
+                    // cryptoId is null when all cryptos have loaded the interval
+                    if (success && cryptoId == null) {
+                        detailView.setIntervalEnabled(interval, true);
+                    }
+                });
+            }
+        });
+        
+        // Set up refresh button callback
+        detailView.setOnRefreshRequested(() -> {
+            // Hide refresh button while refreshing
+            detailView.setRefreshButtonVisible(false);
+            new Thread(() -> {
+                try {
+                    // Refresh all data - clear cache and reload
+                    System.out.println("Refreshing all cryptocurrency data...");
+                    cryptoService.clearCache();
+                    cryptoService.preloadAllData();
+                    // Refresh button will be shown again when preloading completes (monitored below)
+                } catch (Exception e) {
+                    System.err.println("Error during data refresh: " + e.getMessage());
+                }
+            }).start();
+        });
+
+        // Preload all historical data in background thread to avoid blocking UI
+        // This will cache all data so subsequent user interactions don't need API calls
+        Thread preloadThread = new Thread(() -> {
+            try {
+                cryptoService.preloadAllData();
+            } catch (Exception e) {
+                System.err.println("Error during data preloading: " + e.getMessage());
+            }
+        });
+        preloadThread.start();
+        
+        // Monitor preloading completion to show refresh button
+        // Refresh button should be visible only when all data is loaded (no failed loads)
+        // This allows user to refresh to get latest data
+        new Thread(() -> {
+            try {
+                // Wait for preloading to complete
+                preloadThread.join();
+                
+                // Wait a bit more to ensure all callbacks have been processed
+                Thread.sleep(2000);
+                
+                // Check if there are any failed loads
+                int failedCount = cryptoService.getFailedLoadsCount();
+                
+                // Show refresh button only when all data is loaded (no failed loads)
+                javafx.application.Platform.runLater(() -> {
+                    detailView.setRefreshButtonVisible(failedCount == 0);
+                });
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }).start();
         
         // Create the main layout
         javafx.scene.layout.StackPane root = new javafx.scene.layout.StackPane();

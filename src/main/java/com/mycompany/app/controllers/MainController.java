@@ -10,6 +10,7 @@ public class MainController {
     private final CryptoDetailController detailController;
     private final NewsController newsController;
     private Crypto selectedCrypto;
+    private boolean showAllNews = true; // Track which news toggle is selected (default: All)
 
     public MainController(CryptoListController listController,
                          CryptoDetailController detailController,
@@ -23,10 +24,12 @@ public class MainController {
     }
 
     /**
-     * Load initial data (top cryptocurrencies)
+     * Load initial data (top cryptocurrencies and general news)
      */
     public void loadInitialData() {
         listController.loadTopCryptos();
+        // Load general news at startup since "All" is the default toggle
+        newsController.loadGeneralNews();
     }
 
     /**
@@ -38,14 +41,18 @@ public class MainController {
         // Update detail view with selected crypto
         detailController.showCrypto(crypto);
 
-        // Update news feed for selected crypto
-        newsController.loadNewsForCrypto(crypto.getId());
+        // Only update news feed if "Selected" toggle is active
+        // If "All" is selected, general news should remain unchanged
+        if (!showAllNews) {
+            newsController.loadNewsForCrypto(crypto.getId());
+        }
     }
 
     /**
      * Handle news toggle change (All vs Selected)
      */
     public void handleNewsToggleChange(boolean showAll) {
+        this.showAllNews = showAll;
         if (showAll) {
             newsController.loadGeneralNews();
         } else if (selectedCrypto != null) {

@@ -44,6 +44,7 @@ public class CryptoDetailController {
 
     /**
      * Handle time interval selection
+     * Checks if data is available, falls back to 1D if not
      */
     public void selectTimeInterval(String interval) {
         if (currentCrypto == null || view == null) {
@@ -53,12 +54,28 @@ public class CryptoDetailController {
         // Convert interval to days parameter
         String days = convertIntervalToDays(interval);
         
+        // Check if data is available in cache
+        if (!cryptoService.hasHistoricalData(currentCrypto.getId(), days)) {
+            // Data not available - fall back to 1D
+            System.out.println("Data for " + interval + " not available for " + currentCrypto.getName() + ", falling back to 1D");
+            if (view != null) {
+                view.selectIntervalIfEnabled("1D");
+            }
+            return;
+        }
+        
         // Fetch historical data
         HistoricalData data = loadHistoricalData(currentCrypto.getId(), days);
         
         // Update view with data
-        if (data != null) {
+        if (data != null && data.getPoints() != null && !data.getPoints().isEmpty()) {
             view.updateChartData(data);
+        } else {
+            // Data fetch failed - fall back to 1D
+            System.out.println("Failed to load " + interval + " data for " + currentCrypto.getName() + ", falling back to 1D");
+            if (view != null) {
+                view.selectIntervalIfEnabled("1D");
+            }
         }
     }
 
