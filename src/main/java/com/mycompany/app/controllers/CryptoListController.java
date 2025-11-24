@@ -4,7 +4,6 @@ import com.mycompany.app.models.Crypto;
 import com.mycompany.app.services.CryptoService;
 import com.mycompany.app.views.CryptoListView;
 
-import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -39,9 +38,17 @@ public class CryptoListController {
      * Load top cryptocurrencies and display them in the view
      */
     public void loadTopCryptos() {
-        List<Crypto> list = cryptoService.getTopCryptos();
-        if (view != null) {
-            view.displayCryptos(list);
-        }
+        java.util.concurrent.CompletableFuture.supplyAsync(() -> cryptoService.getTopCryptos())
+                .thenAccept(list -> {
+                    System.out.println(
+                            "CryptoListController received " + (list == null ? "null" : list.size()) + " cryptos");
+                    if (view != null) {
+                        javafx.application.Platform.runLater(() -> view.displayCryptos(list));
+                    }
+                })
+                .exceptionally(ex -> {
+                    System.err.println("Failed to load top cryptos: " + ex.getMessage());
+                    return null;
+                });
     }
 }

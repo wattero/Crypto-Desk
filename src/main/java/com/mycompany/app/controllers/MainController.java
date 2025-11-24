@@ -1,4 +1,5 @@
 package com.mycompany.app.controllers;
+
 import com.mycompany.app.models.Crypto;
 
 /**
@@ -10,15 +11,15 @@ public class MainController {
     private final CryptoDetailController detailController;
     private final NewsController newsController;
     private Crypto selectedCrypto;
-    private boolean showAllNews = true; // Track which news toggle is selected (default: All)
+    private boolean showAllNews = true;
 
     public MainController(CryptoListController listController,
-                         CryptoDetailController detailController,
-                         NewsController newsController) {
+            CryptoDetailController detailController,
+            NewsController newsController) {
         this.listController = listController;
         this.detailController = detailController;
         this.newsController = newsController;
-        
+
         // Wire up the crypto selection callback
         this.listController.setOnCryptoSelected(this::selectCrypto);
     }
@@ -28,7 +29,6 @@ public class MainController {
      */
     public void loadInitialData() {
         listController.loadTopCryptos();
-        // Load general news at startup since "All" is the default toggle
         newsController.loadGeneralNews();
     }
 

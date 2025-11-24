@@ -56,7 +56,7 @@ public class CryptoDetailView extends VBox {
         getStyleClass().add("detail-pane");
 
         HBox header = new HBox(10);
-        titleLabel = new Label("Bitcoin (BTC)");
+        titleLabel = new Label("Select a crypto");
         titleLabel.getStyleClass().add("detail-header");
         header.getChildren().add(titleLabel);
 

@@ -6,7 +6,6 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
-import javafx.scene.control.TextField;
 import javafx.scene.layout.*;
 import java.util.List;
 import java.util.function.Consumer;
@@ -60,6 +59,12 @@ public class CryptoListView extends VBox {
         scrollPane.getStyleClass().add("sidebar-scroll-pane");
         VBox.setVgrow(scrollPane, Priority.ALWAYS);
 
+        Label loadingLabel = new Label("Loading data...");
+        loadingLabel.setStyle("-fx-text-fill: white; -fx-padding: 10;");
+        loadingLabel.setMaxWidth(Double.MAX_VALUE);
+        loadingLabel.setAlignment(Pos.CENTER);
+        cryptoListBox.getChildren().add(loadingLabel);
+
         getChildren().addAll(logo, poweredByBox, watchlistHeader, scrollPane);
     }
 
@@ -75,7 +80,8 @@ public class CryptoListView extends VBox {
      * This should be called from the Application class
      */
     public void setHostServices(HostServices hostServices) {
-        // Currently CoinGecko link uses Desktop.browse; keep method for symmetry if we want HostServices later
+        // Currently CoinGecko link uses Desktop.browse; keep method for symmetry if we
+        // want HostServices later
     }
 
     /**
