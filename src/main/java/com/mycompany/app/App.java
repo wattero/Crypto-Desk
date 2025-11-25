@@ -12,8 +12,12 @@ import com.mycompany.app.controllers.CryptoDetailController;
 import com.mycompany.app.controllers.NewsController;
 import com.mycompany.app.controllers.CryptoListController;
 import com.mycompany.app.services.CryptoService;
+import com.mycompany.app.services.PricePollingService;
 import com.mycompany.app.services.SerpAPINewsService;
 import com.mycompany.app.models.Crypto;
+
+import java.util.List;
+import java.util.Map;
 
 /**
  * Crypto Dashboard Application
@@ -24,6 +28,7 @@ public class App extends Application {
         // Initialize services
         CryptoService cryptoService = new CryptoService();
         SerpAPINewsService newsService = new SerpAPINewsService();
+        PricePollingService pricePollingService = new PricePollingService();
         
         // Initialize controllers
         CryptoListController cryptoListController = new CryptoListController(cryptoService);
@@ -108,6 +113,29 @@ public class App extends Application {
         Thread preloadThread = new Thread(() -> {
             try {
                 cryptoService.preloadAllData();
+                
+                // After preloading completes, start price polling with the loaded cryptos
+                List<Crypto> cryptos = cryptoService.getTopCryptos();
+                if (cryptos != null && !cryptos.isEmpty()) {
+                    // Set up price update callback before starting polling
+                    pricePollingService.setPriceUpdateCallback((prices, changes) -> {
+                        javafx.application.Platform.runLater(() -> {
+                            // Update prices in sidebar
+                            for (Map.Entry<String, Double> entry : prices.entrySet()) {
+                                String cryptoId = entry.getKey();
+                                Double price = entry.getValue();
+                                Double change = changes.get(cryptoId);
+                                if (price != null && change != null) {
+                                    cryptoListView.updatePrice(cryptoId, price, change);
+                                    detailView.updatePrice(cryptoId, price, change);
+                                }
+                            }
+                        });
+                    });
+                    
+                    // Start polling
+                    pricePollingService.startPolling(cryptos);
+                }
             } catch (Exception e) {
                 System.err.println("Error during data preloading: " + e.getMessage());
             }
@@ -148,6 +176,12 @@ public class App extends Application {
         // Set up the primary stage
         primaryStage.setTitle("Crypto Dashboard");
         primaryStage.setScene(scene);
+        
+        // Stop price polling when the application is closed
+        primaryStage.setOnCloseRequest(event -> {
+            pricePollingService.stopPolling();
+        });
+        
         primaryStage.show();
     }
 

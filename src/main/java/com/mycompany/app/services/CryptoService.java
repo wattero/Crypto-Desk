@@ -12,6 +12,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -80,14 +83,11 @@ public class CryptoService {
                         .uri(URI.create(url))
                         .GET();
 
-                // Add API key header
-                /*
-                 * String apiKey = props.getProperty("coingecko.api.key");
-                 * if (apiKey != null && !apiKey.isBlank()) {
-                 * reqBuilder.header("X-CG-API-KEY", apiKey);
-                 * reqBuilder.header("Authorization", "Bearer " + apiKey);
-                 * }
-                 */
+                // Add API key header for Demo API
+                String apiKey = props.getProperty("coingecko.api.key");
+                if (apiKey != null && !apiKey.isBlank()) {
+                    reqBuilder.header("x-cg-demo-api-key", apiKey);
+                }
 
                 HttpRequest request = reqBuilder.build();
                 HttpResponse<String> response = httpClient.send(request,
@@ -225,13 +225,11 @@ public class CryptoService {
                         .uri(URI.create(url))
                         .GET();
 
-                /*
-                 * String apiKey = props.getProperty("coingecko.api.key");
-                 * if (apiKey != null && !apiKey.isBlank()) {
-                 * reqBuilder.header("X-CG-API-KEY", apiKey);
-                 * reqBuilder.header("Authorization", "Bearer " + apiKey);
-                 * }
-                 */
+                // Add API key header for Demo API
+                String apiKey = props.getProperty("coingecko.api.key");
+                if (apiKey != null && !apiKey.isBlank()) {
+                    reqBuilder.header("x-cg-demo-api-key", apiKey);
+                }
 
                 HttpRequest request = reqBuilder.build();
                 HttpResponse<String> response = httpClient.send(request,
@@ -334,7 +332,7 @@ public class CryptoService {
         }
 
         System.out.println("Retrying " + failedLoads.size() + " failed data loads...");
-        int delayBetweenCalls = 5000; // 5 seconds
+        int delayBetweenCalls = 1000; // 1 seconds
 
         java.util.List<FailedDataLoad> toRetry = new java.util.ArrayList<>(failedLoads);
         failedLoads.clear();
@@ -400,15 +398,14 @@ public class CryptoService {
     }
 
     /**
-     * Preload cryptocurrency data at startup
-     * Loads data in phases: first all 1D data, then longer intervals
-     * Makes API calls with 5 second delay between calls
+     * Preload cryptocurrency data at startup using parallel API calls.
+     * First attempts all 25 calls in parallel, then retries failures in batches.
      * 
-     * CoinGecko free API limit: 5-15 calls per minute
-     * Strategy: 5 second delay = 12 calls/min (safe margin)
+     * With API key: Higher rate limits allow parallel calls
+     * Strategy: Fire all 25 calls at once, retry failures in batches of 5
      */
     public void preloadAllData() {
-        System.out.println("Preloading cryptocurrency data...");
+        System.out.println("Preloading cryptocurrency data (parallel mode)...");
 
         // Fetch top cryptos (1 API call)
         List<Crypto> cryptos = getTopCryptos();
@@ -417,137 +414,270 @@ public class CryptoService {
 
         // Initialize interval load counts
         intervalLoadCounts.clear();
-        intervalLoadCounts.put("1D", 0);
-        intervalLoadCounts.put("1W", 0);
-        intervalLoadCounts.put("1M", 0);
-        intervalLoadCounts.put("3M", 0);
-        intervalLoadCounts.put("1Y", 0);
-
-        // Time intervals to load (in order: 1D first, then longer intervals)
-        String[] intervals = { "1", "7", "30", "90", "365" }; // 1D, 1W, 1M, 3M, 1Y
         String[] intervalNames = { "1D", "1W", "1M", "3M", "1Y" };
+        for (String name : intervalNames) {
+            intervalLoadCounts.put(name, 0);
+        }
 
-        // Delay between API calls: 5 seconds = 12 calls/min (safe margin under 15
-        // calls/min limit)
-        int delayBetweenCalls = 5000; // 5 seconds
+        // Time intervals to load
+        String[] intervals = { "1", "7", "30", "90", "365" }; // 1D, 1W, 1M, 3M, 1Y
 
-        // Phase 1: Load 1D data for all cryptos first
-        System.out.println("Phase 1: Loading 1D data for all cryptos...");
+        // Create all fetch tasks (5 cryptos × 5 intervals = 25 calls)
+        List<FetchTask> allTasks = new ArrayList<>();
         for (Crypto crypto : cryptos) {
-            System.out.println("Loading 1D data for " + crypto.getName() + "...");
-            try {
-                HistoricalData data = fetchHistoricalDataFromAPI(crypto.getId(), "1");
-                boolean success = false;
-                if (data != null && data.getPoints() != null && !data.getPoints().isEmpty()) {
-                    cache.putHistoricalData(crypto.getId(), "1", data);
-                    System.out.println("✓ Successfully loaded 1D data for " + crypto.getName());
-                    success = true;
-                    // Increment load count for 1D
-                    intervalLoadCounts.put("1D", intervalLoadCounts.get("1D") + 1);
-                } else {
-                    System.err.println("✗ Failed to load 1D data for " + crypto.getName());
-                }
-
-                // Notify callback that this crypto's 1D data is loaded
-                if (dataLoadedCallback != null) {
-                    dataLoadedCallback.onDataLoaded(crypto.getId(), success);
-                    // Check if all 1D data is loaded (1D is always enabled, but we track it anyway)
-                    if (intervalLoadCounts.get("1D") == totalCryptoCount) {
-                        dataLoadedCallback.onIntervalDataLoaded(null, "1D", true); // null cryptoId means all loaded
-                    }
-                }
-
-                // Wait 5 seconds before next call (except for last crypto in phase 1)
-                if (cryptos.indexOf(crypto) < cryptos.size() - 1) {
-                    Thread.sleep(delayBetweenCalls);
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                System.err.println("Interrupted while preloading 1D data for " + crypto.getName());
-                break;
-            } catch (Exception e) {
-                System.err.println("Failed to preload 1D data for " + crypto.getName() + ": " + e.getMessage());
-                // Notify callback even on failure
-                if (dataLoadedCallback != null) {
-                    dataLoadedCallback.onDataLoaded(crypto.getId(), false);
-                }
+            for (int i = 0; i < intervals.length; i++) {
+                allTasks.add(new FetchTask(crypto.getId(), crypto.getName(), intervals[i], intervalNames[i]));
             }
         }
 
-        System.out.println("Phase 1 complete! All cryptos now have 1D data available.");
-        System.out.println("Phase 2: Loading longer intervals (1W, 1M, 3M, 1Y)...");
+        System.out.println("Starting " + allTasks.size() + " parallel API calls...");
+        long startTime = System.currentTimeMillis();
 
-        // Phase 2: Load longer intervals for all cryptos
-        // Skip 1D (index 0) since we already loaded it
-        for (int i = 1; i < intervals.length; i++) {
-            String days = intervals[i];
-            String intervalName = intervalNames[i];
-
-            System.out.println("Loading " + intervalName + " data for all cryptos...");
-
-            for (Crypto crypto : cryptos) {
-                System.out.println("Loading " + intervalName + " data for " + crypto.getName() + "...");
+        // Execute all calls in parallel
+        List<CompletableFuture<FetchResult>> futures = new ArrayList<>();
+        for (FetchTask task : allTasks) {
+            CompletableFuture<FetchResult> future = CompletableFuture.supplyAsync(() -> {
                 try {
-                    HistoricalData data = fetchHistoricalDataFromAPI(crypto.getId(), days);
-                    boolean success = false;
-                    if (data != null && data.getPoints() != null && !data.getPoints().isEmpty()) {
-                        cache.putHistoricalData(crypto.getId(), days, data);
-                        System.out.println("✓ Successfully loaded " + intervalName + " data for " + crypto.getName());
-                        success = true;
-                        // Increment load count for this interval
-                        intervalLoadCounts.put(intervalName, intervalLoadCounts.get(intervalName) + 1);
-                    } else {
-                        System.err.println("✗ Failed to load " + intervalName + " data for " + crypto.getName());
-                        // Track failed load for retry
-                        failedLoads.add(new FailedDataLoad(crypto.getId(), days, intervalName));
-                    }
-
-                    // Notify callback about interval data load
-                    // Only enable interval button when ALL cryptos have loaded this interval
-                    if (dataLoadedCallback != null) {
-                        int loadedCount = intervalLoadCounts.get(intervalName);
-                        // Enable interval button only when all cryptos have loaded this interval
-                        if (loadedCount == totalCryptoCount) {
-                            dataLoadedCallback.onIntervalDataLoaded(null, intervalName, true); // null cryptoId means
-                                                                                               // all loaded
-                        }
-                    }
-
-                    // Wait 5 seconds before next call (except for last call)
-                    if (i < intervals.length - 1 || cryptos.indexOf(crypto) < cryptos.size() - 1) {
-                        Thread.sleep(delayBetweenCalls);
-                    }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    System.err
-                            .println("Interrupted while preloading " + intervalName + " data for " + crypto.getName());
-                    return;
+                    HistoricalData data = fetchHistoricalDataFromAPINoRetry(task.cryptoId, task.days);
+                    boolean success = data != null && data.getPoints() != null && !data.getPoints().isEmpty();
+                    return new FetchResult(task, data, success);
                 } catch (Exception e) {
-                    System.err.println("Failed to preload " + intervalName + " data for " + crypto.getName() + ": "
-                            + e.getMessage());
-                    // Track failed load for retry
-                    failedLoads.add(new FailedDataLoad(crypto.getId(), days, intervalName));
-                    // Don't notify callback about individual failures - we only enable when all
-                    // succeed
+                    System.err.println("Error fetching " + task.intervalName + " for " + task.cryptoName + ": " + e.getMessage());
+                    return new FetchResult(task, null, false);
                 }
+            });
+            futures.add(future);
+        }
+
+        // Wait for all parallel calls to complete
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+        // Process results
+        List<FetchTask> failedTasks = new ArrayList<>();
+        ConcurrentHashMap<String, AtomicInteger> intervalSuccessCounts = new ConcurrentHashMap<>();
+        for (String name : intervalNames) {
+            intervalSuccessCounts.put(name, new AtomicInteger(0));
+        }
+
+        for (CompletableFuture<FetchResult> future : futures) {
+            try {
+                FetchResult result = future.get();
+                if (result.success) {
+                    cache.putHistoricalData(result.task.cryptoId, result.task.days, result.data);
+                    System.out.println("✓ " + result.task.intervalName + " for " + result.task.cryptoName);
+                    intervalSuccessCounts.get(result.task.intervalName).incrementAndGet();
+                    
+                    // Notify callback for 1D data (enables crypto in sidebar)
+                    if (result.task.days.equals("1") && dataLoadedCallback != null) {
+                        final String cryptoId = result.task.cryptoId;
+                        javafx.application.Platform.runLater(() -> {
+                            dataLoadedCallback.onDataLoaded(cryptoId, true);
+                        });
+                    }
+                } else {
+                    System.err.println("✗ " + result.task.intervalName + " for " + result.task.cryptoName + " - will retry");
+                    failedTasks.add(result.task);
+                }
+            } catch (Exception e) {
+                System.err.println("Error processing result: " + e.getMessage());
             }
+        }
+
+        long elapsed = System.currentTimeMillis() - startTime;
+        System.out.println("Parallel phase complete in " + elapsed + "ms. Success: " + (allTasks.size() - failedTasks.size()) + "/" + allTasks.size());
+
+        // Update interval load counts and notify callbacks
+        for (String intervalName : intervalNames) {
+            int count = intervalSuccessCounts.get(intervalName).get();
+            intervalLoadCounts.put(intervalName, count);
+            if (count == totalCryptoCount && dataLoadedCallback != null) {
+                final String interval = intervalName;
+                javafx.application.Platform.runLater(() -> {
+                    dataLoadedCallback.onIntervalDataLoaded(null, interval, true);
+                });
+            }
+        }
+
+        // Retry failed tasks in batches
+        if (!failedTasks.isEmpty()) {
+            System.out.println("Retrying " + failedTasks.size() + " failed calls in batches...");
+            retryInBatches(failedTasks, intervalSuccessCounts, 5, 2000); // batch size 5, 2s between batches
         }
 
         System.out.println("All data preloading complete!");
+    }
 
-        // Retry failed loads once
-        if (!failedLoads.isEmpty()) {
-            System.out.println("Retrying " + failedLoads.size() + " failed data loads...");
-            retryFailedLoads();
+    /**
+     * Retry failed tasks in batches with delay between batches
+     */
+    private void retryInBatches(List<FetchTask> failedTasks, ConcurrentHashMap<String, AtomicInteger> intervalSuccessCounts, 
+                                 int batchSize, int delayBetweenBatchesMs) {
+        List<FetchTask> remaining = new ArrayList<>(failedTasks);
+        int retryAttempt = 0;
+        int maxRetryAttempts = 3;
+
+        while (!remaining.isEmpty() && retryAttempt < maxRetryAttempts) {
+            retryAttempt++;
+            System.out.println("Retry attempt " + retryAttempt + "/" + maxRetryAttempts + " for " + remaining.size() + " tasks...");
+            
+            List<FetchTask> stillFailed = new ArrayList<>();
+            
+            // Process in batches
+            for (int i = 0; i < remaining.size(); i += batchSize) {
+                int end = Math.min(i + batchSize, remaining.size());
+                List<FetchTask> batch = remaining.subList(i, end);
+                
+                System.out.println("Processing batch of " + batch.size() + " calls...");
+                
+                // Execute batch in parallel
+                List<CompletableFuture<FetchResult>> batchFutures = new ArrayList<>();
+                for (FetchTask task : batch) {
+                    CompletableFuture<FetchResult> future = CompletableFuture.supplyAsync(() -> {
+                        try {
+                            HistoricalData data = fetchHistoricalDataFromAPINoRetry(task.cryptoId, task.days);
+                            boolean success = data != null && data.getPoints() != null && !data.getPoints().isEmpty();
+                            return new FetchResult(task, data, success);
+                        } catch (Exception e) {
+                            return new FetchResult(task, null, false);
+                        }
+                    });
+                    batchFutures.add(future);
+                }
+                
+                // Wait for batch to complete
+                CompletableFuture.allOf(batchFutures.toArray(new CompletableFuture[0])).join();
+                
+                // Process batch results
+                for (CompletableFuture<FetchResult> future : batchFutures) {
+                    try {
+                        FetchResult result = future.get();
+                        if (result.success) {
+                            cache.putHistoricalData(result.task.cryptoId, result.task.days, result.data);
+                            System.out.println("✓ Retry success: " + result.task.intervalName + " for " + result.task.cryptoName);
+                            intervalSuccessCounts.get(result.task.intervalName).incrementAndGet();
+                            
+                            // Notify callback for 1D data
+                            if (result.task.days.equals("1") && dataLoadedCallback != null) {
+                                final String cryptoId = result.task.cryptoId;
+                                javafx.application.Platform.runLater(() -> {
+                                    dataLoadedCallback.onDataLoaded(cryptoId, true);
+                                });
+                            }
+                            
+                            // Check if interval is now complete
+                            int count = intervalSuccessCounts.get(result.task.intervalName).get();
+                            intervalLoadCounts.put(result.task.intervalName, count);
+                            if (count == totalCryptoCount && dataLoadedCallback != null) {
+                                final String interval = result.task.intervalName;
+                                javafx.application.Platform.runLater(() -> {
+                                    dataLoadedCallback.onIntervalDataLoaded(null, interval, true);
+                                });
+                            }
+                        } else {
+                            stillFailed.add(result.task);
+                        }
+                    } catch (Exception e) {
+                        // Keep task in failed list
+                    }
+                }
+                
+                // Wait between batches (except for last batch)
+                if (end < remaining.size()) {
+                    try {
+                        Thread.sleep(delayBetweenBatchesMs);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                }
+            }
+            
+            remaining = stillFailed;
+            
+            // Wait before next retry attempt
+            if (!remaining.isEmpty() && retryAttempt < maxRetryAttempts) {
+                try {
+                    System.out.println("Waiting 5s before next retry attempt...");
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
         }
+        
+        // Track any remaining failures
+        for (FetchTask task : remaining) {
+            failedLoads.add(new FailedDataLoad(task.cryptoId, task.days, task.intervalName));
+        }
+        
+        if (!remaining.isEmpty()) {
+            System.err.println(remaining.size() + " tasks still failed after all retries.");
+        }
+    }
 
-        // Notify that preloading is complete
-        // Refresh button should be visible when all data is loaded (no failed loads)
-        if (dataLoadedCallback != null && failedLoads.isEmpty()) {
-            // Signal that all data is loaded - refresh button can be shown
-            javafx.application.Platform.runLater(() -> {
-                // This will be handled by the callback in App.java
-            });
+    /**
+     * Fetch historical data without retry logic (for parallel calls)
+     */
+    private HistoricalData fetchHistoricalDataFromAPINoRetry(String id, String days) {
+        String baseUrl = props.getProperty("coingecko.api.url", DEFAULT_API_URL);
+        
+        try {
+            String url = String.format("%s/coins/%s/market_chart?vs_currency=usd&days=%s", baseUrl, id, days);
+
+            HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .GET();
+
+            // Add API key header for Demo API
+            String apiKey = props.getProperty("coingecko.api.key");
+            if (apiKey != null && !apiKey.isBlank()) {
+                reqBuilder.header("x-cg-demo-api-key", apiKey);
+            }
+
+            HttpRequest request = reqBuilder.build();
+            HttpResponse<String> response = httpClient.send(request,
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+
+            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                return parseMarketChartJson(response.body());
+            } else {
+                System.err.println("API returned " + response.statusCode() + " for " + id + " days=" + days);
+                return null;
+            }
+        } catch (IOException | InterruptedException e) {
+            System.err.println("Error fetching " + id + " days=" + days + ": " + e.getMessage());
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            return null;
+        }
+    }
+
+    // Helper classes for parallel fetch
+    private static class FetchTask {
+        final String cryptoId;
+        final String cryptoName;
+        final String days;
+        final String intervalName;
+
+        FetchTask(String cryptoId, String cryptoName, String days, String intervalName) {
+            this.cryptoId = cryptoId;
+            this.cryptoName = cryptoName;
+            this.days = days;
+            this.intervalName = intervalName;
+        }
+    }
+
+    private static class FetchResult {
+        final FetchTask task;
+        final HistoricalData data;
+        final boolean success;
+
+        FetchResult(FetchTask task, HistoricalData data, boolean success) {
+            this.task = task;
+            this.data = data;
+            this.success = success;
         }
     }
 

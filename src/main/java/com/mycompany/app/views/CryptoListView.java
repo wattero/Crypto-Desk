@@ -22,6 +22,8 @@ public class CryptoListView extends VBox {
     private final VBox cryptoListBox = new VBox(8);
     private HBox selectedSidebarItem = null;
     private final java.util.Map<String, HBox> cryptoItems = new java.util.HashMap<>();
+    private final java.util.Map<String, Label> priceLabels = new java.util.HashMap<>();
+    private final java.util.Map<String, Label> changeLabels = new java.util.HashMap<>();
 
     // Callback for when a crypto is selected
     private Consumer<Crypto> onCryptoSelected;
@@ -91,6 +93,8 @@ public class CryptoListView extends VBox {
     public void displayCryptos(List<Crypto> cryptos) {
         cryptoListBox.getChildren().clear();
         cryptoItems.clear();
+        priceLabels.clear();
+        changeLabels.clear();
         for (Crypto crypto : cryptos) {
             HBox item = createSidebarItem(crypto);
             cryptoListBox.getChildren().add(item);
@@ -137,9 +141,11 @@ public class CryptoListView extends VBox {
 
         Label priceLabel = new Label(crypto.getPriceFormatted());
         priceLabel.getStyleClass().add("sidebar-price");
+        priceLabels.put(crypto.getId(), priceLabel);
 
         Label change = new Label(crypto.getChangeFormatted());
         change.getStyleClass().add(crypto.getChangePercent() >= 0 ? "positive-change" : "negative-change");
+        changeLabels.put(crypto.getId(), change);
 
         VBox priceAndChange = new VBox(4);
         priceAndChange.setAlignment(Pos.CENTER_RIGHT);
@@ -148,6 +154,28 @@ public class CryptoListView extends VBox {
         item.getChildren().addAll(nameAndSymbol, spacer, priceAndChange);
         item.setOnMouseClicked(e -> selectCrypto(crypto, item));
         return item;
+    }
+
+    /**
+     * Update the displayed price and change for a crypto
+     * Called by the price polling service
+     * @param cryptoId The crypto ID
+     * @param newPrice The new price
+     * @param newChangePercent The new 24h change percentage
+     */
+    public void updatePrice(String cryptoId, double newPrice, double newChangePercent) {
+        Label priceLabel = priceLabels.get(cryptoId);
+        Label changeLabel = changeLabels.get(cryptoId);
+        
+        if (priceLabel != null) {
+            priceLabel.setText(String.format("$%,.2f", newPrice));
+        }
+        
+        if (changeLabel != null) {
+            changeLabel.setText(String.format("%s%.2f%%", newChangePercent >= 0 ? "▲" : "▼", Math.abs(newChangePercent)));
+            changeLabel.getStyleClass().removeAll("positive-change", "negative-change");
+            changeLabel.getStyleClass().add(newChangePercent >= 0 ? "positive-change" : "negative-change");
+        }
     }
 
     private void selectCrypto(Crypto crypto, HBox item) {

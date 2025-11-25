@@ -40,6 +40,9 @@ public class CryptoDetailView extends VBox {
     private final java.util.Map<String, Button> intervalButtonMap = new java.util.HashMap<>();
     private Button selectedIntervalButton = null;
     private Button refreshButton;
+    
+    // Track the currently displayed crypto ID for price updates
+    private String currentCryptoId = null;
 
     private final Label marketCapValue = new Label();
     private final Label volumeValue = new Label();
@@ -244,6 +247,7 @@ public class CryptoDetailView extends VBox {
             return;
         }
 
+        currentCryptoId = crypto.getId();
         titleLabel.setText(crypto.getName() + " (" + crypto.getSymbol() + ")");
         priceLabel.setText(crypto.getPriceFormatted());
         changeLabel.setText(crypto.getChangeFormatted());
@@ -269,6 +273,33 @@ public class CryptoDetailView extends VBox {
             // If no interval is selected or selected is disabled, select 1D
             selectIntervalIfEnabled("1D");
         }
+    }
+    
+    /**
+     * Update the displayed price and change for the current crypto
+     * Called by the price polling service - only updates if cryptoId matches current
+     * @param cryptoId The crypto ID
+     * @param newPrice The new price
+     * @param newChangePercent The new 24h change percentage
+     */
+    public void updatePrice(String cryptoId, double newPrice, double newChangePercent) {
+        // Only update if this is the currently displayed crypto
+        if (currentCryptoId == null || !currentCryptoId.equals(cryptoId)) {
+            return;
+        }
+        
+        priceLabel.setText(String.format("$%,.2f", newPrice));
+        changeLabel.setText(String.format("%s%.2f%%", newChangePercent >= 0 ? "▲" : "▼", Math.abs(newChangePercent)));
+        changeLabel.getStyleClass().removeAll("positive-change", "negative-change");
+        changeLabel.getStyleClass().add(newChangePercent >= 0 ? "positive-change" : "negative-change");
+    }
+    
+    /**
+     * Get the currently displayed crypto ID
+     * @return The crypto ID or null if none is displayed
+     */
+    public String getCurrentCryptoId() {
+        return currentCryptoId;
     }
     
     /**
@@ -510,6 +541,7 @@ public class CryptoDetailView extends VBox {
     }
 
     private void clear() {
+        currentCryptoId = null;
         titleLabel.setText("Select a crypto");
         priceLabel.setText("");
         changeLabel.setText("");
