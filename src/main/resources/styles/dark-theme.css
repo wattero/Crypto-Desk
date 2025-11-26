@@ -242,6 +242,12 @@
     -fx-text-fill: #808080;
 }
 
+/* --- SKELETON LOADING --- */
+.skeleton-line {
+    -fx-background-color: #2A2A2F;
+    -fx-background-radius: 4px;
+}
+
 /* --- SCROLLBARS --- */
 .scroll-bar:vertical, .scroll-bar:horizontal {
     -fx-background-color: transparent;

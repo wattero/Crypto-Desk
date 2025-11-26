@@ -10,7 +10,12 @@ import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.Timeline;
+import javafx.util.Duration;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -19,6 +24,7 @@ public class NewsView extends VBox {
     private final ToggleButton allToggle;
     private final ToggleButton selectedToggle;
     private HostServices hostServices;
+    private static final int SKELETON_COUNT = 4;
 
     public NewsView(Consumer<Boolean> onToggleChanged) {
         super(15);
@@ -64,12 +70,78 @@ public class NewsView extends VBox {
         return allToggle.isSelected();
     }
 
+    /**
+     * Show skeleton loading cards while news is being fetched
+     */
+    public void showLoading() {
+        newsList.getChildren().clear();
+        for (int i = 0; i < SKELETON_COUNT; i++) {
+            newsList.getChildren().add(createSkeletonCard());
+        }
+    }
+
     public void updateNews(List<News> news) {
         newsList.getChildren().clear();
         if (news == null) return;
         for (News n : news) {
             newsList.getChildren().add(createNewsCard(n));
         }
+    }
+
+    /**
+     * Create a skeleton loading card with animated shimmer effect
+     */
+    private VBox createSkeletonCard() {
+        VBox card = new VBox(8);
+        card.getStyleClass().add("news-card");
+
+        // Skeleton title (two lines)
+        Region titleLine1 = createSkeletonLine(0.9);
+        Region titleLine2 = createSkeletonLine(0.6);
+
+        // Skeleton metadata
+        Region metadataLine = createSkeletonLine(0.4);
+        metadataLine.setMaxHeight(12);
+        metadataLine.setMinHeight(12);
+
+        // Skeleton summary
+        VBox summaryContainer = new VBox(4);
+        summaryContainer.setPadding(new Insets(5, 0, 5, 0));
+        Region summaryLine1 = createSkeletonLine(1.0);
+        Region summaryLine2 = createSkeletonLine(0.85);
+        summaryLine1.setMaxHeight(11);
+        summaryLine1.setMinHeight(11);
+        summaryLine2.setMaxHeight(11);
+        summaryLine2.setMinHeight(11);
+        summaryContainer.getChildren().addAll(summaryLine1, summaryLine2);
+
+        card.getChildren().addAll(titleLine1, titleLine2, metadataLine, summaryContainer);
+        return card;
+    }
+
+    /**
+     * Create a single skeleton line with shimmer animation
+     */
+    private Region createSkeletonLine(double widthPercentage) {
+        Region line = new Region();
+        line.getStyleClass().add("skeleton-line");
+        line.setMaxWidth(Double.MAX_VALUE);
+        line.setMinHeight(16);
+        line.setMaxHeight(16);
+        
+        // Set width as percentage of parent
+        line.maxWidthProperty().bind(newsList.widthProperty().multiply(widthPercentage).subtract(20));
+        
+        // Add shimmer animation
+        Timeline timeline = new Timeline(
+            new KeyFrame(Duration.ZERO, new KeyValue(line.opacityProperty(), 0.3)),
+            new KeyFrame(Duration.millis(800), new KeyValue(line.opacityProperty(), 0.6)),
+            new KeyFrame(Duration.millis(1600), new KeyValue(line.opacityProperty(), 0.3))
+        );
+        timeline.setCycleCount(Timeline.INDEFINITE);
+        timeline.play();
+        
+        return line;
     }
 
     private VBox createNewsCard(News news) {

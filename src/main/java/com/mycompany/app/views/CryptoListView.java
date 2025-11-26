@@ -179,6 +179,10 @@ public class CryptoListView extends VBox {
     }
 
     private void selectCrypto(Crypto crypto, HBox item) {
+        selectCrypto(crypto, item, true);
+    }
+
+    private void selectCrypto(Crypto crypto, HBox item, boolean notifyCallback) {
         // Don't allow selection if item is disabled
         if (item.isDisable()) {
             return;
@@ -190,9 +194,26 @@ public class CryptoListView extends VBox {
         selectedSidebarItem = item;
         selectedSidebarItem.getStyleClass().add("sidebar-item-selected");
 
-        // Notify controller about selection
-        if (onCryptoSelected != null) {
+        // Notify controller about selection (only if requested)
+        if (notifyCallback && onCryptoSelected != null) {
             onCryptoSelected.accept(crypto);
+        }
+    }
+
+    /**
+     * Programmatically select a crypto by ID (shows visual selection state)
+     * Does not trigger the onCryptoSelected callback to avoid duplicate handling
+     */
+    public void selectCryptoById(String cryptoId) {
+        HBox item = cryptoItems.get(cryptoId);
+        if (item != null) {
+            // Find the crypto object - we need it for the selection
+            // Create a minimal Crypto just for selection purposes
+            if (selectedSidebarItem != null) {
+                selectedSidebarItem.getStyleClass().remove("sidebar-item-selected");
+            }
+            selectedSidebarItem = item;
+            selectedSidebarItem.getStyleClass().add("sidebar-item-selected");
         }
     }
 }
