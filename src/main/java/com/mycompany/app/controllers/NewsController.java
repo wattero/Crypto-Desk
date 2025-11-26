@@ -34,6 +34,9 @@ public class NewsController {
      * Load general cryptocurrency news asynchronously
      */
     public void loadGeneralNews() {
+        if (view != null) {
+            Platform.runLater(() -> view.showLoading());
+        }
         CompletableFuture.supplyAsync(() -> newsService.getGeneralNews())
             .thenAccept(news -> {
                 if (view != null) {
@@ -50,6 +53,9 @@ public class NewsController {
      * Load news for a specific cryptocurrency asynchronously
      */
     public void loadNewsForCrypto(String cryptoId) {
+        if (view != null) {
+            Platform.runLater(() -> view.showLoading());
+        }
         CompletableFuture.supplyAsync(() -> newsService.getNewsForCrypto(cryptoId))
             .thenAccept(news -> {
                 if (view != null) {
