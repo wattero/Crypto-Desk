@@ -68,6 +68,9 @@ public class App extends Application {
         // Load initial data immediately so UI shows something
         mainController.loadInitialData();
 
+        // Track if we've already auto-selected Bitcoin
+        final boolean[] bitcoinAutoSelected = {false};
+        
         // Set up callback to enable crypto buttons and interval buttons when their data is loaded
         cryptoService.setDataLoadedCallback(new com.mycompany.app.services.ICryptoService.DataLoadedCallback() {
             @Override
@@ -75,6 +78,21 @@ public class App extends Application {
                 javafx.application.Platform.runLater(() -> {
                     if (success) {
                         cryptoListView.setCryptoEnabled(cryptoId, true);
+                        
+                        // Auto-select Bitcoin when its data is loaded (first time only)
+                        if (!bitcoinAutoSelected[0] && "bitcoin".equalsIgnoreCase(cryptoId)) {
+                            bitcoinAutoSelected[0] = true;
+                            List<Crypto> cryptos = cryptoService.getTopCryptos();
+                            if (cryptos != null) {
+                                cryptos.stream()
+                                    .filter(c -> "bitcoin".equalsIgnoreCase(c.getId()))
+                                    .findFirst()
+                                    .ifPresent(bitcoin -> {
+                                        cryptoListController.selectCryptoById(bitcoin.getId());
+                                        mainController.selectCrypto(bitcoin);
+                                    });
+                            }
+                        }
                     }
                 });
             }

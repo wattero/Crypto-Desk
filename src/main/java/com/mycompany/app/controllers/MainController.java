@@ -26,6 +26,7 @@ public class MainController {
 
     /**
      * Load initial data (top cryptocurrencies and general news)
+     * Bitcoin will be auto-selected once its data is loaded via the DataLoadedCallback in App.java
      */
     public void loadInitialData() {
         listController.loadTopCryptos();

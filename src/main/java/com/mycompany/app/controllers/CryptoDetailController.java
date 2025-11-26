@@ -59,24 +59,24 @@ public class CryptoDetailController {
         
         // Check if data is available in cache
         if (!cryptoService.hasHistoricalData(currentCrypto.getId(), days)) {
-            // Data not available - fall back to 1D
-            System.out.println("Data for " + interval + " not available for " + currentCrypto.getName() + ", falling back to 1D");
-            if (view != null) {
+            // Data not available - fall back to 1D if not already on 1D
+            if (!interval.equals("1D")) {
+                System.out.println("Data for " + interval + " not available for " + currentCrypto.getName() + ", falling back to 1D");
                 view.selectIntervalIfEnabled("1D");
             }
             return;
         }
         
-        // Fetch historical data
+        // Fetch historical data from cache
         HistoricalData data = loadHistoricalData(currentCrypto.getId(), days);
         
         // Update view with data
         if (data != null && data.getPoints() != null && !data.getPoints().isEmpty()) {
             view.updateChartData(data);
         } else {
-            // Data fetch failed - fall back to 1D
-            System.out.println("Failed to load " + interval + " data for " + currentCrypto.getName() + ", falling back to 1D");
-            if (view != null) {
+            // Data fetch failed - fall back to 1D if not already on 1D
+            if (!interval.equals("1D")) {
+                System.out.println("Failed to load " + interval + " data for " + currentCrypto.getName() + ", falling back to 1D");
                 view.selectIntervalIfEnabled("1D");
             }
         }

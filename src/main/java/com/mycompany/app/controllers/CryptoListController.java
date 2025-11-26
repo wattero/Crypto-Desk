@@ -38,15 +38,38 @@ public class CryptoListController {
     }
 
     /**
+     * Programmatically select a crypto by ID in the list view
+     * This shows the visual selection state without triggering the callback
+     */
+    public void selectCryptoById(String cryptoId) {
+        if (view != null) {
+            view.selectCryptoById(cryptoId);
+        }
+    }
+
+    /**
      * Load top cryptocurrencies and display them in the view
      */
     public void loadTopCryptos() {
+        loadTopCryptos(null);
+    }
+
+    /**
+     * Load top cryptocurrencies and display them in the view,
+     * then optionally call a callback with the loaded list
+     */
+    public void loadTopCryptos(Consumer<java.util.List<Crypto>> onLoaded) {
         java.util.concurrent.CompletableFuture.supplyAsync(() -> cryptoService.getTopCryptos())
                 .thenAccept(list -> {
                     System.out.println(
                             "CryptoListController received " + (list == null ? "null" : list.size()) + " cryptos");
                     if (view != null) {
-                        javafx.application.Platform.runLater(() -> view.displayCryptos(list));
+                        javafx.application.Platform.runLater(() -> {
+                            view.displayCryptos(list);
+                            if (onLoaded != null && list != null) {
+                                onLoaded.accept(list);
+                            }
+                        });
                     }
                 })
                 .exceptionally(ex -> {
